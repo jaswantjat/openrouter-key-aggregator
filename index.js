@@ -6,8 +6,9 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-// Import controllers
+// Import controllers and middleware
 const modelsController = require('./src/controllers/modelsController');
+const { apiKeyAuth: importedApiKeyAuth } = require('./src/middleware/apiKeyAuth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -298,38 +299,56 @@ function apiKeyAuth(req, res, next) {
 }
 
 // Explicit route for /models (n8n compatibility)
-app.get('/models', apiKeyAuth, (req, res) => {
+app.get('/models', importedApiKeyAuth, (req, res) => {
   console.log('[DEBUG] Direct /models route hit');
   modelsController.getModels(req, res);
 });
 
 // Explicit route for /v1/models
-app.get('/v1/models', apiKeyAuth, (req, res) => {
+app.get('/v1/models', importedApiKeyAuth, (req, res) => {
   console.log('[DEBUG] Direct /v1/models route hit');
   modelsController.getModels(req, res);
 });
 
 // Explicit route for /v1/models/:model
-app.get('/v1/models/:model', apiKeyAuth, (req, res) => {
-  console.log(`[DEBUG] Direct /v1/models/${req.params.model} route hit`);
+app.get('/v1/models/:model*', importedApiKeyAuth, (req, res) => {
+  // Extract the full model name from the URL
+  const fullPath = req.path;
+  const modelName = fullPath.replace('/v1/models/', '');
+  console.log(`[DEBUG] Direct /v1/models/${modelName} route hit`);
+
+  // Override the params.model with the full model name
+  req.params.model = modelName;
   modelsController.getModel(req, res);
 });
 
 // Explicit route for /api/v1/models
-app.get('/api/v1/models', apiKeyAuth, (req, res) => {
+app.get('/api/v1/models', importedApiKeyAuth, (req, res) => {
   console.log('[DEBUG] Direct /api/v1/models route hit');
   modelsController.getModels(req, res);
 });
 
 // Explicit route for /api/v1/models/:model
-app.get('/api/v1/models/:model', apiKeyAuth, (req, res) => {
-  console.log(`[DEBUG] Direct /api/v1/models/${req.params.model} route hit`);
+app.get('/api/v1/models/:model*', importedApiKeyAuth, (req, res) => {
+  // Extract the full model name from the URL
+  const fullPath = req.path;
+  const modelName = fullPath.replace('/api/v1/models/', '');
+  console.log(`[DEBUG] Direct /api/v1/models/${modelName} route hit`);
+
+  // Override the params.model with the full model name
+  req.params.model = modelName;
   modelsController.getModel(req, res);
 });
 
 // Explicit route for /models/:model
-app.get('/models/:model', apiKeyAuth, (req, res) => {
-  console.log(`[DEBUG] Direct /models/${req.params.model} route hit`);
+app.get('/models/:model*', importedApiKeyAuth, (req, res) => {
+  // Extract the full model name from the URL
+  const fullPath = req.path;
+  const modelName = fullPath.replace('/models/', '');
+  console.log(`[DEBUG] Direct /models/${modelName} route hit`);
+
+  // Override the params.model with the full model name
+  req.params.model = modelName;
   modelsController.getModel(req, res);
 });
 
