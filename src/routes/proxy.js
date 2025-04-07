@@ -20,7 +20,15 @@ router.post('/proxy/chat/completions', getAuthMiddleware(), proxyRequest);
 router.post('/proxy/completions', getAuthMiddleware(), proxyRequest);
 router.post('/proxy/embeddings', getAuthMiddleware(), proxyRequest);
 
+// OpenAI SDK compatible routes
+router.post('/v1/chat/completions', getAuthMiddleware(), proxyRequest);
+router.post('/v1/completions', getAuthMiddleware(), proxyRequest);
+router.post('/v1/embeddings', getAuthMiddleware(), proxyRequest);
+
 // Catch-all route for any other OpenRouter endpoints
 router.all('/proxy', getAuthMiddleware(), proxyRequest);
+
+// Additional OpenAI SDK compatible routes (use regex pattern instead of wildcard)
+router.all('/v1/:path', getAuthMiddleware(), proxyRequest);
 
 module.exports = router;

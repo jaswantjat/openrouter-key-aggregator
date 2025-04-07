@@ -11,6 +11,7 @@ A service that manages multiple OpenRouter API keys to bypass the 200 requests p
 - Provides a status endpoint to monitor key usage
 - Supports API key authentication for clients
 - Optional basic authentication for admin access
+- Compatible with OpenAI SDK (supports both `/api/proxy/...` and `/api/v1/...` endpoints)
 
 ## Installation
 
@@ -137,6 +138,31 @@ X-API-Key: your_api_key
 
 # Or as a query parameter
 ?api_key=your_api_key
+```
+
+### Using with OpenAI SDK
+
+You can use the OpenAI SDK with this service by setting the base URL to your service URL:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+  base_url="https://your-service.onrender.com/api",  # Note: include /api in the base URL
+  api_key="your_api_key",  # This can be any value when using X-API-Key header
+  default_headers={
+    "X-API-Key": "your_api_key"  # Your actual API key from the admin dashboard
+  }
+)
+
+completion = client.chat.completions.create(
+  model="google/gemini-2.5-pro-preview-03-25",
+  messages=[
+    {"role": "user", "content": "Hello, how are you?"}
+  ]
+)
+
+print(completion.choices[0].message.content)
 ```
 
 #### Basic Authentication (For Admin Access)

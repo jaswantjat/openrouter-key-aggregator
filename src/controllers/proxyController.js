@@ -11,11 +11,21 @@ const proxyRequest = async (req, res, next) => {
 
     // Determine the endpoint based on the request path
     let endpoint = '/chat/completions';
-    if (req.path.includes('/completions') && !req.path.includes('/chat/completions')) {
+
+    // Handle both OpenRouter style paths (/proxy/...) and OpenAI SDK style paths (/v1/...)
+    const path = req.path;
+
+    if (path.includes('/completions') && !path.includes('/chat/completions')) {
       endpoint = '/completions';
-    } else if (req.path.includes('/embeddings')) {
+    } else if (path.includes('/embeddings')) {
       endpoint = '/embeddings';
+    } else if (path.includes('/chat/completions')) {
+      endpoint = '/chat/completions';
     }
+
+    // Log the request path and endpoint for debugging
+    console.log(`Request path: ${path}`);
+    console.log(`Determined endpoint: ${endpoint}`);
 
     // Pass through all headers from the original request
     const headers = {
