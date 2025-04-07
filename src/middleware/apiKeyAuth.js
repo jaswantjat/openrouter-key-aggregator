@@ -9,24 +9,52 @@ const apiKeyAuth = (req, res, next) => {
     return next();
   }
 
-  // Get API key from header or query parameter
-  const apiKey = req.headers['x-api-key'] || req.query.api_key;
-  
+  // Get API key from various possible locations
+  // 1. x-api-key header (case insensitive)
+  // 2. authorization header with Bearer prefix
+  // 3. query parameter
+  let apiKey = null;
+
+  // Check for x-api-key header (case insensitive)
+  const headerKeys = Object.keys(req.headers);
+  const apiKeyHeader = headerKeys.find(key => key.toLowerCase() === 'x-api-key');
+  if (apiKeyHeader) {
+    apiKey = req.headers[apiKeyHeader];
+  }
+
+  // Check for authorization header with Bearer prefix
+  if (!apiKey && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    apiKey = req.headers.authorization.substring(7);
+  }
+
+  // Check for query parameter
+  if (!apiKey && req.query.api_key) {
+    apiKey = req.query.api_key;
+  }
+
   if (!apiKey) {
     return res.status(401).json({
-      error: true,
-      message: 'API key is required'
+      error: {
+        message: 'API key is required',
+        type: 'authentication_error',
+        param: null,
+        code: 'invalid_api_key'
+      }
     });
   }
-  
+
   // Validate API key
   if (!apiKeyManager.validateKey(apiKey)) {
     return res.status(401).json({
-      error: true,
-      message: 'Invalid or rate-limited API key'
+      error: {
+        message: 'Invalid or rate-limited API key',
+        type: 'authentication_error',
+        param: null,
+        code: 'invalid_api_key'
+      }
     });
   }
-  
+
   // API key is valid, proceed
   next();
 };

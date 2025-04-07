@@ -219,11 +219,31 @@ When configuring OpenAI credentials in n8n:
 3. **Organization ID**: Leave blank
 
 > **IMPORTANT**: For n8n specifically, use just the base URL without any path. n8n will automatically append the necessary paths. Do not include `/api` or `/v1` in the URL.
->
-> If you're having trouble seeing the models in n8n, make sure:
-> 1. You've added at least one valid OpenRouter API key to your `.env` file
-> 2. Your client API key is correctly configured in the n8n OpenAI credentials
-> 3. The service is running and accessible from n8n
+
+#### Troubleshooting "Models not found" in n8n
+
+If you're seeing a "models not found" error in n8n, try these solutions:
+
+1. **Check your OpenRouter API key**: Make sure you've added at least one valid OpenRouter API key to your `.env` file. The key should start with `sk-or-v1-`.
+
+2. **Verify your client API key**: Make sure the API key you're using in n8n is correctly configured and active in your service.
+
+3. **Try different header formats**: n8n might be sending the API key in a different format. In your n8n OpenAI credentials, try adding these custom headers:
+   ```json
+   {
+     "x-api-key": "YOUR_API_KEY_HERE"
+   }
+   ```
+
+4. **Check CORS settings**: Make sure your n8n instance can access your service. If you're running n8n locally, make sure it can access your deployed service or local service.
+
+5. **Test the models endpoint directly**: Use curl or Postman to test the models endpoint directly:
+   ```bash
+   curl -X GET https://your-service.onrender.com/v1/models \
+     -H "x-api-key: YOUR_API_KEY_HERE"
+   ```
+
+6. **Restart your service**: Sometimes a simple restart of your service can fix the issue.
 
 #### Basic Authentication (For Admin Access)
 

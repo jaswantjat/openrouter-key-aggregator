@@ -62,13 +62,18 @@ function resetDailyCounters() {
 
 // Get next available API key
 function getNextKey() {
+  // Check if we have any OpenRouter API keys configured
+  if (openRouterKeys.length === 0) {
+    throw new Error('No OpenRouter API keys configured. Please add valid API keys to the OPENROUTER_API_KEYS environment variable.');
+  }
+
   // Filter out disabled keys and keys that have reached the daily limit
   const availableKeys = openRouterKeys.filter(keyData =>
     !keyData.disabled && keyData.dailyCount < 200
   );
 
   if (availableKeys.length === 0) {
-    throw new Error('No available API keys');
+    throw new Error('No available API keys. All keys are either disabled or have reached their daily limit.');
   }
 
   // Sort by last used timestamp (oldest first)
@@ -240,9 +245,16 @@ initializeOpenRouterKeys();
 initializeClientApiKeys();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'x-api-key', 'OpenAI-Organization']
+}));
 app.use(express.json());
 app.use(express.static('public'));
+
+// Handle OPTIONS requests for CORS preflight
+app.options('*', cors());
 
 // Authentication middleware
 function authenticate(req, res, next) {
@@ -414,14 +426,23 @@ async function proxyRequest(req, res) {
       console.error('- Response data:', error.response.data);
     }
 
-    // Create a more detailed error response
-    const errorResponse = {
-      error: true,
-      message: error.message,
-      status: error.response?.status,
-      details: error.response?.data || {},
-      timestamp: new Date().toISOString()
-    };
+    // Format error in OpenAI-compatible format
+    let errorResponse;
+
+    if (error.response?.data?.error) {
+      // If OpenRouter already returned an error in OpenAI format, use it
+      errorResponse = error.response.data;
+    } else {
+      // Otherwise, create an OpenAI-compatible error format
+      errorResponse = {
+        error: {
+          message: error.message,
+          type: "server_error",
+          param: null,
+          code: error.response?.status ? `http_${error.response.status}` : "unknown_error"
+        }
+      };
+    }
 
     // Send the error response directly instead of using the error handler
     return res.status(error.response?.status || 500).json(errorResponse);
