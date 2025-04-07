@@ -37,14 +37,20 @@ class ApiKeyManager {
       }
     });
 
-    // Add test key for development
-    const testKey = '076b883862ef9163161e6ec19a376e68';
-    apiKeyCache.set(testKey, {
-      name: 'Test Key',
-      rateLimit: 0,
-      requests: 0,
-      lastUsed: null,
-      created: new Date().toISOString()
+    // Add test keys for development
+    const testKeys = [
+      '076b883862ef9163161e6ec19a376e68',
+      '258d989626459539c44ad77589a0e1f8'
+    ];
+
+    testKeys.forEach((key, index) => {
+      apiKeyCache.set(key, {
+        name: `Test Key ${index + 1}`,
+        rateLimit: 0,
+        requests: 0,
+        lastUsed: null,
+        created: new Date().toISOString()
+      });
     });
 
     console.log(`Initialized ${apiKeyCache.keys().length} client API keys`);
