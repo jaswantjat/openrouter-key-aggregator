@@ -9,7 +9,8 @@ A service that manages multiple OpenRouter API keys to bypass the 200 requests p
 - Automatically rotates keys based on usage limits
 - Respects OpenRouter rate limits (200 requests/day, 20 requests/minute, 5 seconds between requests)
 - Provides a status endpoint to monitor key usage
-- Optional basic authentication
+- Supports API key authentication for clients
+- Optional basic authentication for admin access
 
 ## Installation
 
@@ -106,7 +107,41 @@ Returns the current status of all API keys, including usage statistics.
 
 ### Authentication
 
-To enable authentication, set the following environment variables:
+#### API Key Authentication (Recommended for Clients)
+
+To enable API key authentication for clients, set the following environment variable:
+
+```
+API_KEY_AUTH_ENABLED=true
+```
+
+Then generate API keys using the admin API:
+
+```bash
+# Generate a new API key
+curl -X POST https://your-service.onrender.com/api/keys \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Basic $(echo -n admin:password | base64)" \
+  -d '{"name": "Client App 1", "rateLimit": 100}'
+
+# List all API keys
+curl https://your-service.onrender.com/api/keys \
+  -H "Authorization: Basic $(echo -n admin:password | base64)"
+```
+
+Clients can then use the API key in their requests:
+
+```
+# As a header
+X-API-Key: your_api_key
+
+# Or as a query parameter
+?api_key=your_api_key
+```
+
+#### Basic Authentication (For Admin Access)
+
+To enable basic authentication for admin access, set the following environment variables:
 
 ```
 AUTH_ENABLED=true
@@ -114,7 +149,7 @@ AUTH_USERNAME=your_username
 AUTH_PASSWORD=your_password
 ```
 
-Then include the Authorization header in your requests:
+Then include the Authorization header in your admin requests:
 
 ```
 Authorization: Basic base64(username:password)

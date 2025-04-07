@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const proxyRoutes = require('./src/routes/proxy');
 const statusRoutes = require('./src/routes/status');
+const apiKeyRoutes = require('./src/routes/apiKeys');
 const { errorHandler } = require('./src/middleware/errorHandler');
 
 const app = express();
@@ -15,6 +16,7 @@ app.use(express.json());
 // Routes
 app.use('/api', proxyRoutes);
 app.use('/api', statusRoutes);
+app.use('/api', apiKeyRoutes);
 
 // Home route
 app.get('/', (req, res) => {
@@ -23,7 +25,8 @@ app.get('/', (req, res) => {
     status: 'running',
     endpoints: {
       proxy: '/api/proxy',
-      status: '/api/status'
+      status: '/api/status',
+      apiKeys: '/api/keys'
     }
   });
 });
