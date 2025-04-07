@@ -429,18 +429,18 @@ async function proxyRequest(req, res) {
 }
 
 // Proxy routes
-app.post('/api/proxy/chat/completions', apiKeyAuth, proxyRequest);
-app.post('/api/proxy/completions', apiKeyAuth, proxyRequest);
-app.post('/api/proxy/embeddings', apiKeyAuth, proxyRequest);
+app.post('/api/proxy/chat/completions', importedApiKeyAuth, proxyRequest);
+app.post('/api/proxy/completions', importedApiKeyAuth, proxyRequest);
+app.post('/api/proxy/embeddings', importedApiKeyAuth, proxyRequest);
 
 // OpenAI SDK compatible routes
-app.post('/api/v1/chat/completions', apiKeyAuth, proxyRequest);
-app.post('/api/v1/completions', apiKeyAuth, proxyRequest);
-app.post('/api/v1/embeddings', apiKeyAuth, proxyRequest);
+app.post('/api/v1/chat/completions', importedApiKeyAuth, proxyRequest);
+app.post('/api/v1/completions', importedApiKeyAuth, proxyRequest);
+app.post('/api/v1/embeddings', importedApiKeyAuth, proxyRequest);
 
-app.post('/v1/chat/completions', apiKeyAuth, proxyRequest);
-app.post('/v1/completions', apiKeyAuth, proxyRequest);
-app.post('/v1/embeddings', apiKeyAuth, proxyRequest);
+app.post('/v1/chat/completions', importedApiKeyAuth, proxyRequest);
+app.post('/v1/completions', importedApiKeyAuth, proxyRequest);
+app.post('/v1/embeddings', importedApiKeyAuth, proxyRequest);
 
 // API Key management routes
 app.post('/api/keys', authenticate, (req, res) => {
