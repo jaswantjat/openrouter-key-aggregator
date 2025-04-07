@@ -23,20 +23,20 @@ function initializeOpenRouterKeys() {
     lastUsed: 0,
     disabled: false
   }));
-  
+
   console.log(`Initialized ${openRouterKeys.length} API keys`);
-  
+
   // Schedule daily counter reset
   const now = new Date();
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(0, 0, 0, 0);
-  
+
   const timeUntilReset = tomorrow - now;
   const minutesUntilReset = Math.floor(timeUntilReset / (1000 * 60));
-  
+
   console.log(`Scheduled counter reset in ${minutesUntilReset} minutes`);
-  
+
   setTimeout(() => {
     resetDailyCounters();
   }, timeUntilReset);
@@ -47,9 +47,9 @@ function resetDailyCounters() {
   openRouterKeys.forEach(keyData => {
     keyData.dailyCount = 0;
   });
-  
+
   console.log('Daily counters reset');
-  
+
   // Schedule next reset
   setTimeout(() => {
     resetDailyCounters();
@@ -59,17 +59,17 @@ function resetDailyCounters() {
 // Get next available API key
 function getNextKey() {
   // Filter out disabled keys and keys that have reached the daily limit
-  const availableKeys = openRouterKeys.filter(keyData => 
+  const availableKeys = openRouterKeys.filter(keyData =>
     !keyData.disabled && keyData.dailyCount < 200
   );
-  
+
   if (availableKeys.length === 0) {
     throw new Error('No available API keys');
   }
-  
+
   // Sort by last used timestamp (oldest first)
   availableKeys.sort((a, b) => a.lastUsed - b.lastUsed);
-  
+
   return availableKeys[0].key;
 }
 
@@ -80,7 +80,7 @@ function incrementKeyUsage(key) {
     keyData.dailyCount++;
     keyData.minuteCount++;
     keyData.lastUsed = Date.now();
-    
+
     // Reset minute counter after 1 minute
     setTimeout(() => {
       keyData.minuteCount--;
@@ -95,7 +95,7 @@ function initializeClientApiKeys() {
     console.log('Initialized 0 client API keys');
     return;
   }
-  
+
   clientApiKeys = keysString.split(',').filter(keyString => keyString.trim()).map(keyString => {
     // Format should be "name:key:rateLimit"
     const [name, key, rateLimit] = keyString.split(':');
@@ -107,14 +107,14 @@ function initializeClientApiKeys() {
       lastUsed: null,
     };
   });
-  
+
   console.log(`Initialized ${clientApiKeys.length} client API keys`);
 }
 
 // Generate a new client API key
 function generateApiKey(name, rateLimit) {
   const key = crypto.randomBytes(16).toString('hex');
-  
+
   clientApiKeys.push({
     name,
     key,
@@ -122,10 +122,10 @@ function generateApiKey(name, rateLimit) {
     requests: 0,
     lastUsed: null,
   });
-  
+
   // Update environment variable
   updateClientApiKeysEnv();
-  
+
   return key;
 }
 
@@ -134,22 +134,22 @@ function updateClientApiKeysEnv() {
   const keysString = clientApiKeys.map(keyInfo => {
     return `${keyInfo.name}:${keyInfo.key}:${keyInfo.rateLimit}`;
   }).join(',');
-  
+
   process.env.CLIENT_API_KEYS = keysString;
-  
+
   // If running locally, update .env file
   if (process.env.NODE_ENV !== 'production') {
     try {
       const envPath = path.join(__dirname, '.env');
       let envContent = fs.readFileSync(envPath, 'utf8');
-      
+
       // Replace or add CLIENT_API_KEYS
       if (envContent.includes('CLIENT_API_KEYS=')) {
         envContent = envContent.replace(/CLIENT_API_KEYS=.*/, `CLIENT_API_KEYS=${keysString}`);
       } else {
         envContent += `\nCLIENT_API_KEYS=${keysString}`;
       }
-      
+
       fs.writeFileSync(envPath, envContent);
     } catch (error) {
       console.error('Error updating .env file:', error);
@@ -161,12 +161,12 @@ function updateClientApiKeysEnv() {
 function revokeApiKey(key) {
   const initialLength = clientApiKeys.length;
   clientApiKeys = clientApiKeys.filter(keyInfo => keyInfo.key !== key);
-  
+
   if (clientApiKeys.length < initialLength) {
     updateClientApiKeysEnv();
     return true;
   }
-  
+
   return false;
 }
 
@@ -197,21 +197,21 @@ function verifyApiKey(key) {
   if (!keyInfo) {
     return false;
   }
-  
+
   // Check rate limit
   if (keyInfo.rateLimit > 0 && keyInfo.requests >= keyInfo.rateLimit) {
     return false;
   }
-  
+
   // Update usage
   keyInfo.requests++;
   keyInfo.lastUsed = Date.now();
-  
+
   // Reset requests counter after 1 minute
   setTimeout(() => {
     keyInfo.requests--;
   }, 60 * 1000);
-  
+
   return true;
 }
 
@@ -244,7 +244,7 @@ function authenticate(req, res, next) {
   if (process.env.AUTH_ENABLED !== 'true') {
     return next();
   }
-  
+
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Basic ')) {
     return res.status(401).json({
@@ -252,18 +252,18 @@ function authenticate(req, res, next) {
       message: 'Authentication required'
     });
   }
-  
+
   const base64Credentials = authHeader.split(' ')[1];
   const credentials = Buffer.from(base64Credentials, 'base64').toString('utf8');
   const [username, password] = credentials.split(':');
-  
+
   if (username !== process.env.AUTH_USERNAME || password !== process.env.AUTH_PASSWORD) {
     return res.status(401).json({
       error: true,
       message: 'Invalid credentials'
     });
   }
-  
+
   next();
 }
 
@@ -272,31 +272,31 @@ function apiKeyAuth(req, res, next) {
   if (process.env.API_KEY_AUTH_ENABLED !== 'true') {
     return next();
   }
-  
+
   // Check for API key in header or query parameter
   const apiKey = req.headers['x-api-key'] || req.query.api_key;
-  
+
   if (!apiKey) {
     return res.status(401).json({
       error: true,
       message: 'Authentication required'
     });
   }
-  
+
   if (!verifyApiKey(apiKey)) {
     return res.status(401).json({
       error: true,
       message: 'Invalid API key or rate limit exceeded'
     });
   }
-  
+
   next();
 }
 
 // Explicit route for /models (n8n compatibility)
 app.get('/models', (req, res) => {
   console.log('[DEBUG] Direct /models route hit');
-  
+
   // Return a list of models in OpenAI format
   res.json({
     object: "list",
@@ -338,7 +338,7 @@ app.get('/models', (req, res) => {
 // Explicit route for /v1/models
 app.get('/v1/models', (req, res) => {
   console.log('[DEBUG] Direct /v1/models route hit');
-  
+
   // Return a list of models in OpenAI format
   res.json({
     object: "list",
@@ -380,7 +380,7 @@ app.get('/v1/models', (req, res) => {
 // Explicit route for /api/v1/models
 app.get('/api/v1/models', (req, res) => {
   console.log('[DEBUG] Direct /api/v1/models route hit');
-  
+
   // Return a list of models in OpenAI format
   res.json({
     object: "list",
@@ -512,10 +512,27 @@ app.post('/v1/embeddings', apiKeyAuth, proxyRequest);
 // API Key management routes
 app.post('/api/keys', authenticate, (req, res) => {
   const { name, rateLimit } = req.body;
-  const key = generateApiKey(name, rateLimit);
+
+  if (!name) {
+    return res.status(400).json({
+      error: true,
+      message: 'Name is required'
+    });
+  }
+
+  const parsedRateLimit = parseInt(rateLimit) || 0;
+  const key = generateApiKey(name, parsedRateLimit);
+
+  console.log(`Generated API key for ${name} with rate limit ${parsedRateLimit}`);
+
   res.json({
     success: true,
-    key
+    message: 'API key generated successfully',
+    data: {
+      name,
+      key,
+      rateLimit: parsedRateLimit
+    }
   });
 });
 
@@ -523,7 +540,7 @@ app.get('/api/keys', authenticate, (req, res) => {
   const keys = getApiKeys();
   res.json({
     success: true,
-    keys
+    data: keys
   });
 });
 
@@ -557,10 +574,17 @@ app.get('/api/keys/export', authenticate, (req, res) => {
 // Status route
 app.get('/api/status', authenticate, (req, res) => {
   const keys = getKeyStatus();
+  const totalRequests = keys.reduce((sum, key) => sum + key.dailyCount, 0);
+  const totalRemaining = keys.reduce((sum, key) => sum + key.dailyRemaining, 0);
+
   res.json({
     keys,
-    totalKeys: keys.length,
-    activeKeys: keys.filter(k => !k.disabled).length
+    summary: {
+      totalKeys: keys.length,
+      activeKeys: keys.filter(k => !k.disabled).length,
+      totalRequests,
+      totalRemaining
+    }
   });
 });
 
@@ -585,7 +609,7 @@ app.get('/', (req, res) => {
 // Catch-all route for debugging n8n requests
 app.all('*', (req, res) => {
   console.log(`[DEBUG] Unhandled request: ${req.method} ${req.url}`);
-  
+
   // For n8n compatibility, return a 200 response with empty data
   if (req.url.includes('/models')) {
     return res.json({
@@ -593,7 +617,7 @@ app.all('*', (req, res) => {
       data: []
     });
   }
-  
+
   res.status(404).json({
     error: true,
     message: `Route not found: ${req.method} ${req.url}`,
