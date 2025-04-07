@@ -1,12 +1,12 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const proxyRoutes = require('./src/routes/proxy');
+const { proxyRequest } = require('./src/controllers/proxyController');
+const { authenticate } = require('./src/middleware/auth');
+const { apiKeyAuth } = require('./src/middleware/apiKeyAuth');
+const { errorHandler } = require('./src/middleware/errorHandler');
 const statusRoutes = require('./src/routes/status');
 const apiKeyRoutes = require('./src/routes/apiKeys');
-const modelsRoutes = require('./src/routes/models');
-const directModelsRoutes = require('./src/routes/directModels');
-const { errorHandler } = require('./src/middleware/errorHandler');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,20 +14,6 @@ const PORT = process.env.PORT || 3000;
 // Debug middleware to log all requests
 app.use((req, res, next) => {
   console.log(`[DEBUG] ${new Date().toISOString()} - ${req.method} ${req.url}`);
-  console.log(`[DEBUG] Headers: ${JSON.stringify(req.headers)}`);
-
-  // Store the original end method
-  const originalEnd = res.end;
-
-  // Override the end method
-  res.end = function(chunk, encoding) {
-    // Call the original end method
-    originalEnd.call(this, chunk, encoding);
-
-    // Log the response status
-    console.log(`[DEBUG] Response Status: ${res.statusCode}`);
-  };
-
   next();
 });
 
@@ -36,8 +22,18 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// IMPORTANT: Explicit route for /models (n8n compatibility)
-// This must be defined BEFORE any other routes
+// Auth middleware
+const getAuthMiddleware = () => {
+  if (process.env.API_KEY_AUTH_ENABLED === 'true') {
+    return apiKeyAuth;
+  }
+  if (process.env.AUTH_ENABLED === 'true') {
+    return authenticate;
+  }
+  return (req, res, next) => next(); // No auth if both are disabled
+};
+
+// Explicit route for /models (n8n compatibility)
 app.get('/models', (req, res) => {
   console.log('[DEBUG] Direct /models route hit');
   
@@ -79,61 +75,23 @@ app.get('/models', (req, res) => {
   });
 });
 
-// Routes
-app.use('/api', proxyRoutes);
+// API routes
 app.use('/api', statusRoutes);
 app.use('/api', apiKeyRoutes);
-app.use('/api', modelsRoutes);
 
-// Direct v1 routes for OpenAI SDK compatibility
-app.use('/api/v1', proxyRoutes);
-app.use('/api/v1', modelsRoutes);
+// Proxy routes
+app.post('/api/proxy/chat/completions', getAuthMiddleware(), proxyRequest);
+app.post('/api/proxy/completions', getAuthMiddleware(), proxyRequest);
+app.post('/api/proxy/embeddings', getAuthMiddleware(), proxyRequest);
 
-// Explicit route for /api/v1/models
-app.get('/api/v1/models', (req, res) => {
-  console.log('[DEBUG] Direct /api/v1/models route hit');
-  
-  // Return a list of models in OpenAI format
-  res.json({
-    object: "list",
-    data: [
-      {
-        id: "meta-llama/llama-4-maverick:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "meta-llama"
-      },
-      {
-        id: "meta-llama/llama-4-scout:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "meta-llama"
-      },
-      {
-        id: "google/gemini-2.5-pro-exp-03-25:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "google"
-      },
-      {
-        id: "deepseek/deepseek-chat-v3-0324:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "deepseek"
-      },
-      {
-        id: "google/gemini-2.0-flash-exp:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "google"
-      }
-    ]
-  });
-});
+// OpenAI SDK compatible routes
+app.post('/api/v1/chat/completions', getAuthMiddleware(), proxyRequest);
+app.post('/api/v1/completions', getAuthMiddleware(), proxyRequest);
+app.post('/api/v1/embeddings', getAuthMiddleware(), proxyRequest);
 
-// Root-level v1 routes for n8n compatibility
-app.use('/v1', proxyRoutes);
-app.use('/v1', modelsRoutes);
+app.post('/v1/chat/completions', getAuthMiddleware(), proxyRequest);
+app.post('/v1/completions', getAuthMiddleware(), proxyRequest);
+app.post('/v1/embeddings', getAuthMiddleware(), proxyRequest);
 
 // Explicit route for /v1/models
 app.get('/v1/models', (req, res) => {
@@ -177,8 +135,47 @@ app.get('/v1/models', (req, res) => {
   });
 });
 
-// Direct root-level routes for n8n compatibility
-app.use('/', directModelsRoutes);
+// Explicit route for /api/v1/models
+app.get('/api/v1/models', (req, res) => {
+  console.log('[DEBUG] Direct /api/v1/models route hit');
+  
+  // Return a list of models in OpenAI format
+  res.json({
+    object: "list",
+    data: [
+      {
+        id: "meta-llama/llama-4-maverick:free",
+        object: "model",
+        created: 1714348800,
+        owned_by: "meta-llama"
+      },
+      {
+        id: "meta-llama/llama-4-scout:free",
+        object: "model",
+        created: 1714348800,
+        owned_by: "meta-llama"
+      },
+      {
+        id: "google/gemini-2.5-pro-exp-03-25:free",
+        object: "model",
+        created: 1714348800,
+        owned_by: "google"
+      },
+      {
+        id: "deepseek/deepseek-chat-v3-0324:free",
+        object: "model",
+        created: 1714348800,
+        owned_by: "deepseek"
+      },
+      {
+        id: "google/gemini-2.0-flash-exp:free",
+        object: "model",
+        created: 1714348800,
+        owned_by: "google"
+      }
+    ]
+  });
+});
 
 // Home route - JSON info
 app.get('/api', (req, res) => {
@@ -201,8 +198,6 @@ app.get('/', (req, res) => {
 // Catch-all route for debugging n8n requests
 app.all('*', (req, res) => {
   console.log(`[DEBUG] Unhandled request: ${req.method} ${req.url}`);
-  console.log(`[DEBUG] Query params: ${JSON.stringify(req.query)}`);
-  console.log(`[DEBUG] Body: ${JSON.stringify(req.body)}`);
   
   // For n8n compatibility, return a 200 response with empty data
   if (req.url.includes('/models')) {
