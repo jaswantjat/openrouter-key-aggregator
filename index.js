@@ -12,14 +12,15 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.static('public'));
 
 // Routes
 app.use('/api', proxyRoutes);
 app.use('/api', statusRoutes);
 app.use('/api', apiKeyRoutes);
 
-// Home route
-app.get('/', (req, res) => {
+// Home route - JSON info
+app.get('/api', (req, res) => {
   res.json({
     message: 'OpenRouter API Key Aggregator',
     status: 'running',
@@ -29,6 +30,11 @@ app.get('/', (req, res) => {
       apiKeys: '/api/keys'
     }
   });
+});
+
+// Home route - Redirect to admin dashboard
+app.get('/', (req, res) => {
+  res.redirect('/admin.html');
 });
 
 // Error handling middleware
