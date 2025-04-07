@@ -148,10 +148,15 @@ You can use the OpenAI SDK with this service by setting the base URL to your ser
 from openai import OpenAI
 
 client = OpenAI(
-  base_url="https://your-service.onrender.com/api",  # Note: include /api in the base URL
-  api_key="your_api_key",  # This can be any value when using X-API-Key header
+  # IMPORTANT: For n8n and other OpenAI SDK clients, use this format:
+  base_url="https://your-service.onrender.com/api/v1",  # Note: include /api/v1 in the base URL
+
+  # Your API key from the admin dashboard
+  api_key="your_api_key",
+
+  # Optional: You can also set the API key in the headers
   default_headers={
-    "X-API-Key": "your_api_key"  # Your actual API key from the admin dashboard
+    "X-API-Key": "your_api_key"  # Same as above
   }
 )
 
@@ -171,6 +176,14 @@ completion = client.chat.completions.create(
 
 print(completion.choices[0].message.content)
 ```
+
+### Using with n8n
+
+When configuring OpenAI credentials in n8n:
+
+1. **API Key**: Your API key generated from the admin dashboard
+2. **Base URL**: `https://your-service.onrender.com/api/v1`
+3. **Organization ID**: Leave blank
 
 #### Basic Authentication (For Admin Access)
 

@@ -19,6 +19,9 @@ app.use('/api', proxyRoutes);
 app.use('/api', statusRoutes);
 app.use('/api', apiKeyRoutes);
 
+// Direct v1 routes for OpenAI SDK compatibility
+app.use('/api/v1', proxyRoutes);
+
 // Home route - JSON info
 app.get('/api', (req, res) => {
   res.json({
