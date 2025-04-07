@@ -1,12 +1,12 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { proxyRequest } = require('./src/controllers/proxyController');
+const axios = require('axios');
+const { errorHandler } = require('./src/middleware/errorHandler');
+const keyManager = require('./src/utils/keyManager');
+const apiKeyManager = require('./src/utils/apiKeyManager');
 const { authenticate } = require('./src/middleware/auth');
 const { apiKeyAuth } = require('./src/middleware/apiKeyAuth');
-const { errorHandler } = require('./src/middleware/errorHandler');
-const statusRoutes = require('./src/routes/status');
-const apiKeyRoutes = require('./src/routes/apiKeys');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,15 +22,19 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Auth middleware
-const getAuthMiddleware = () => {
-  if (process.env.API_KEY_AUTH_ENABLED === 'true') {
-    return apiKeyAuth;
+// Auth middleware functions
+const getBasicAuthMiddleware = (req, res, next) => {
+  if (process.env.AUTH_ENABLED !== 'true') {
+    return next();
   }
-  if (process.env.AUTH_ENABLED === 'true') {
-    return authenticate;
+  return authenticate(req, res, next);
+};
+
+const getApiKeyAuthMiddleware = (req, res, next) => {
+  if (process.env.API_KEY_AUTH_ENABLED !== 'true') {
+    return next();
   }
-  return (req, res, next) => next(); // No auth if both are disabled
+  return apiKeyAuth(req, res, next);
 };
 
 // Explicit route for /models (n8n compatibility)
@@ -74,24 +78,6 @@ app.get('/models', (req, res) => {
     ]
   });
 });
-
-// API routes
-app.use('/api', statusRoutes);
-app.use('/api', apiKeyRoutes);
-
-// Proxy routes
-app.post('/api/proxy/chat/completions', getAuthMiddleware(), proxyRequest);
-app.post('/api/proxy/completions', getAuthMiddleware(), proxyRequest);
-app.post('/api/proxy/embeddings', getAuthMiddleware(), proxyRequest);
-
-// OpenAI SDK compatible routes
-app.post('/api/v1/chat/completions', getAuthMiddleware(), proxyRequest);
-app.post('/api/v1/completions', getAuthMiddleware(), proxyRequest);
-app.post('/api/v1/embeddings', getAuthMiddleware(), proxyRequest);
-
-app.post('/v1/chat/completions', getAuthMiddleware(), proxyRequest);
-app.post('/v1/completions', getAuthMiddleware(), proxyRequest);
-app.post('/v1/embeddings', getAuthMiddleware(), proxyRequest);
 
 // Explicit route for /v1/models
 app.get('/v1/models', (req, res) => {
@@ -174,6 +160,158 @@ app.get('/api/v1/models', (req, res) => {
         owned_by: "google"
       }
     ]
+  });
+});
+
+// Proxy function
+const proxyRequest = async (req, res) => {
+  try {
+    // Get the next available API key
+    const apiKey = keyManager.getNextKey();
+
+    // Determine the endpoint based on the request path
+    let endpoint = '/chat/completions';
+    const path = req.path;
+
+    if (path.includes('/completions') && !path.includes('/chat/completions')) {
+      endpoint = '/completions';
+    } else if (path.includes('/embeddings')) {
+      endpoint = '/embeddings';
+    } else if (path.includes('/chat/completions')) {
+      endpoint = '/chat/completions';
+    }
+
+    // Log the request path and endpoint for debugging
+    console.log(`Request path: ${path}`);
+    console.log(`Determined endpoint: ${endpoint}`);
+
+    // Pass through all headers from the original request
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': req.headers['referer'] || req.headers['http-referer'] || 'https://api-aggregator.example.com',
+      'X-Title': req.headers['x-title'] || 'API Key Aggregator'
+    };
+
+    // Log the request for debugging
+    console.log(`Proxying request to: ${process.env.OPENROUTER_API_URL}${endpoint}`);
+    console.log(`Request model: ${req.body.model || 'Not specified'}`);
+
+    // Forward the request to OpenRouter with the original request body
+    const response = await axios({
+      method: req.method,
+      url: `${process.env.OPENROUTER_API_URL}${endpoint}`,
+      headers: headers,
+      data: req.body,
+      timeout: 120000 // 2 minute timeout
+    });
+
+    // Log successful response
+    console.log(`Received response from OpenRouter with status: ${response.status}`);
+
+    // Increment key usage
+    keyManager.incrementKeyUsage(apiKey);
+
+    // Return the response
+    return res.status(response.status).json(response.data);
+  } catch (error) {
+    // Log detailed error information
+    console.error('Proxy request error:');
+    console.error(`- Status: ${error.response?.status || 'No status'}`);
+    console.error(`- Message: ${error.message}`);
+    console.error(`- URL: ${error.config?.url || 'Unknown URL'}`);
+
+    if (error.response?.data) {
+      console.error('- Response data:', error.response.data);
+    }
+
+    // Handle API key errors
+    if (error.response && error.response.status === 429) {
+      const apiKey = error.config.headers.Authorization.replace('Bearer ', '');
+      keyManager.recordKeyError(apiKey);
+      console.error(`Recorded rate limit error for API key: ${apiKey.substring(0, 4)}...`);
+    }
+
+    // Create a more detailed error response
+    const errorResponse = {
+      error: true,
+      message: error.message,
+      status: error.response?.status,
+      details: error.response?.data || {},
+      timestamp: new Date().toISOString()
+    };
+
+    // Send the error response directly instead of using the error handler
+    return res.status(error.response?.status || 500).json(errorResponse);
+  }
+};
+
+// Proxy routes
+app.post('/api/proxy/chat/completions', getApiKeyAuthMiddleware, proxyRequest);
+app.post('/api/proxy/completions', getApiKeyAuthMiddleware, proxyRequest);
+app.post('/api/proxy/embeddings', getApiKeyAuthMiddleware, proxyRequest);
+
+// OpenAI SDK compatible routes
+app.post('/api/v1/chat/completions', getApiKeyAuthMiddleware, proxyRequest);
+app.post('/api/v1/completions', getApiKeyAuthMiddleware, proxyRequest);
+app.post('/api/v1/embeddings', getApiKeyAuthMiddleware, proxyRequest);
+
+app.post('/v1/chat/completions', getApiKeyAuthMiddleware, proxyRequest);
+app.post('/v1/completions', getApiKeyAuthMiddleware, proxyRequest);
+app.post('/v1/embeddings', getApiKeyAuthMiddleware, proxyRequest);
+
+// API Key management routes
+app.post('/api/keys', getBasicAuthMiddleware, (req, res) => {
+  const { name, rateLimit } = req.body;
+  const key = apiKeyManager.generateApiKey(name, rateLimit);
+  res.json({
+    success: true,
+    key
+  });
+});
+
+app.get('/api/keys', getBasicAuthMiddleware, (req, res) => {
+  const keys = apiKeyManager.getApiKeys();
+  res.json({
+    success: true,
+    keys
+  });
+});
+
+app.delete('/api/keys/:key', getBasicAuthMiddleware, (req, res) => {
+  const key = req.params.key;
+  const success = apiKeyManager.revokeApiKey(key);
+  if (success) {
+    res.json({
+      success: true,
+      message: `API key ${key} revoked successfully`
+    });
+  } else {
+    res.status(404).json({
+      success: false,
+      message: `API key ${key} not found`
+    });
+  }
+});
+
+app.get('/api/keys/export', getBasicAuthMiddleware, (req, res) => {
+  const exportData = apiKeyManager.exportApiKeys();
+  res.json({
+    success: true,
+    data: {
+      environmentVariable: 'CLIENT_API_KEYS',
+      value: exportData
+    }
+  });
+});
+
+// Status route
+app.get('/api/status', getBasicAuthMiddleware, (req, res) => {
+  const keys = keyManager.getKeyStatus();
+  res.json({
+    keys,
+    totalKeys: keys.length,
+    activeKeys: keys.filter(k => !k.disabled).length
   });
 });
 
