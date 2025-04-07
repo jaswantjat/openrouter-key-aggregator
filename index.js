@@ -4,6 +4,7 @@ const cors = require('cors');
 const proxyRoutes = require('./src/routes/proxy');
 const statusRoutes = require('./src/routes/status');
 const apiKeyRoutes = require('./src/routes/apiKeys');
+const modelsRoutes = require('./src/routes/models');
 const { errorHandler } = require('./src/middleware/errorHandler');
 
 const app = express();
@@ -18,9 +19,15 @@ app.use(express.static('public'));
 app.use('/api', proxyRoutes);
 app.use('/api', statusRoutes);
 app.use('/api', apiKeyRoutes);
+app.use('/api', modelsRoutes);
 
 // Direct v1 routes for OpenAI SDK compatibility
 app.use('/api/v1', proxyRoutes);
+app.use('/api/v1', modelsRoutes);
+
+// Root-level v1 routes for n8n compatibility
+app.use('/v1', proxyRoutes);
+app.use('/v1', modelsRoutes);
 
 // Home route - JSON info
 app.get('/api', (req, res) => {

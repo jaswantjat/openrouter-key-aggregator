@@ -142,14 +142,16 @@ X-API-Key: your_api_key
 
 ### Using with OpenAI SDK
 
-You can use the OpenAI SDK with this service by setting the base URL to your service URL:
+You can use the OpenAI SDK with this service by setting the base URL to your service URL. The configuration depends on which tool you're using:
+
+#### For Python OpenAI SDK
 
 ```python
 from openai import OpenAI
 
 client = OpenAI(
-  # IMPORTANT: For n8n and other OpenAI SDK clients, use this format:
-  base_url="https://your-service.onrender.com/api/v1",  # Note: include /api/v1 in the base URL
+  # For direct Python OpenAI SDK usage:
+  base_url="https://your-service.onrender.com/api/v1",  # Include /api/v1 in the base URL
 
   # Your API key from the admin dashboard
   api_key="your_api_key",
@@ -168,13 +170,41 @@ completion = client.chat.completions.create(
   ]
 )
 
-# Or try other free models:
-# model="meta-llama/llama-4-scout:free"
-# model="google/gemini-2.5-pro-exp-03-25:free"
-# model="deepseek/deepseek-chat-v3-0324:free"
-# model="google/gemini-2.0-flash-exp:free"
-
 print(completion.choices[0].message.content)
+```
+
+#### For JavaScript OpenAI SDK
+
+```javascript
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  baseURL: 'https://your-service.onrender.com/api/v1', // Include /api/v1 in the base URL
+  apiKey: 'your_api_key',
+  defaultHeaders: {
+    'X-API-Key': 'your_api_key'
+  }
+});
+
+const completion = await openai.chat.completions.create({
+  model: 'meta-llama/llama-4-maverick:free',
+  messages: [
+    { role: 'user', content: 'Hello, how are you?' }
+  ]
+});
+
+console.log(completion.choices[0].message.content);
+```
+
+#### Available Free Models
+
+You can use any of these free models:
+```
+meta-llama/llama-4-maverick:free
+meta-llama/llama-4-scout:free
+google/gemini-2.5-pro-exp-03-25:free
+deepseek/deepseek-chat-v3-0324:free
+google/gemini-2.0-flash-exp:free
 ```
 
 ### Using with n8n
@@ -182,8 +212,10 @@ print(completion.choices[0].message.content)
 When configuring OpenAI credentials in n8n:
 
 1. **API Key**: Your API key generated from the admin dashboard
-2. **Base URL**: `https://your-service.onrender.com/api/v1`
+2. **Base URL**: `https://your-service.onrender.com` (just the base URL without any path)
 3. **Organization ID**: Leave blank
+
+> **IMPORTANT**: For n8n specifically, use just the base URL without any path. n8n will automatically append the necessary paths. Do not include `/api` or `/v1` in the URL.
 
 #### Basic Authentication (For Admin Access)
 
