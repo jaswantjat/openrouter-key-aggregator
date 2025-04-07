@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: openrouter-key-aggregator
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: OPENROUTER_API_KEYS
+        sync: false
+      - key: PORT
+        value: 3000
+      - key: AUTH_ENABLED
+        value: false
+      - key: AUTH_USERNAME
+        sync: false
+      - key: AUTH_PASSWORD
+        sync: false
+      - key: OPENROUTER_API_URL
+        value: https://openrouter.ai/api/v1
