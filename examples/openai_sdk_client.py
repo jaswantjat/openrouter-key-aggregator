@@ -42,21 +42,32 @@ def run_examples():
     """
     print('OpenRouter API Key Aggregator - OpenAI SDK Client Examples')
     print('========================================================')
-    
+
     try:
-        # Example 1: Google Gemini 2.5 Pro
-        print('\n1. Google Gemini 2.5 Pro')
+        # Example 1: Llama 4 Maverick (Free)
+        print('\n1. Llama 4 Maverick (Free)')
         print('------------------------')
-        gemini_response = client.chat.completions.create(
-            model="google/gemini-2.5-pro-preview-03-25",
+        llama4_response = client.chat.completions.create(
+            model="meta-llama/llama-4-maverick:free",
             messages=[
                 {"role": "user", "content": "Explain quantum computing in simple terms"}
             ]
         )
+        print('Response:', llama4_response.choices[0].message.content)
+
+        # Example 2: Gemini 2.5 Pro Exp (Free)
+        print('\n2. Gemini 2.5 Pro Exp (Free)')
+        print('------------------------')
+        gemini_response = client.chat.completions.create(
+            model="google/gemini-2.5-pro-exp-03-25:free",
+            messages=[
+                {"role": "user", "content": "What are the benefits of renewable energy?"}
+            ]
+        )
         print('Response:', gemini_response.choices[0].message.content)
-        
-        # Example 2: Anthropic Claude 3.5 Sonnet
-        print('\n2. Anthropic Claude 3.5 Sonnet')
+
+        # Example 3: Anthropic Claude 3.5 Sonnet
+        print('\n3. Anthropic Claude 3.5 Sonnet')
         print('-----------------------------')
         claude_response = client.chat.completions.create(
             model="anthropic/claude-3-5-sonnet",
@@ -65,7 +76,7 @@ def run_examples():
             ]
         )
         print('Response:', claude_response.choices[0].message.content)
-        
+
         # Example 3: OpenAI GPT-4o
         print('\n3. OpenAI GPT-4o')
         print('----------------')
@@ -76,7 +87,7 @@ def run_examples():
             ]
         )
         print('Response:', gpt_response.choices[0].message.content)
-            
+
     except Exception as e:
         print(f"Error running examples: {e}")
 

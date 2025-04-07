@@ -26,7 +26,7 @@ def call_api(model, prompt):
         'HTTP-Referer': 'https://example.com',
         'X-Title': 'API Key Aggregator Python Example'
     }
-    
+
     # Add authentication if enabled
     if AUTH_USERNAME and AUTH_PASSWORD:
         auth_string = f"{AUTH_USERNAME}:{AUTH_PASSWORD}"
@@ -34,7 +34,7 @@ def call_api(model, prompt):
         base64_bytes = base64.b64encode(auth_bytes)
         base64_string = base64_bytes.decode('ascii')
         headers['Authorization'] = f'Basic {base64_string}'
-    
+
     # Create request body
     data = {
         'model': model,
@@ -42,20 +42,20 @@ def call_api(model, prompt):
             {'role': 'user', 'content': prompt}
         ]
     }
-    
+
     # Make the API call
     response = requests.post(
         f'{API_URL}/proxy/chat/completions',
         headers=headers,
         json=data
     )
-    
+
     # Check for errors
     if response.status_code != 200:
         print(f"Error: {response.status_code}")
         print(response.text)
         return None
-    
+
     return response.json()
 
 def run_examples():
@@ -64,20 +64,30 @@ def run_examples():
     """
     print('OpenRouter API Key Aggregator - Python Client Examples')
     print('====================================================')
-    
+
     try:
-        # Example 1: Google Gemini 2.5 Pro
-        print('\n1. Google Gemini 2.5 Pro')
+        # Example 1: Llama 4 Maverick (Free)
+        print('\n1. Llama 4 Maverick (Free)')
+        print('------------------------')
+        llama4_response = call_api(
+            'meta-llama/llama-4-maverick:free',
+            'Explain quantum computing in simple terms'
+        )
+        if llama4_response:
+            print('Response:', llama4_response['choices'][0]['message']['content'])
+
+        # Example 2: Gemini 2.5 Pro Exp (Free)
+        print('\n2. Gemini 2.5 Pro Exp (Free)')
         print('------------------------')
         gemini_response = call_api(
-            'google/gemini-2.5-pro-preview-03-25',
-            'Explain quantum computing in simple terms'
+            'google/gemini-2.5-pro-exp-03-25:free',
+            'What are the benefits of renewable energy?'
         )
         if gemini_response:
             print('Response:', gemini_response['choices'][0]['message']['content'])
-        
-        # Example 2: Anthropic Claude 3.5 Sonnet
-        print('\n2. Anthropic Claude 3.5 Sonnet')
+
+        # Example 3: Anthropic Claude 3.5 Sonnet
+        print('\n3. Anthropic Claude 3.5 Sonnet')
         print('-----------------------------')
         claude_response = call_api(
             'anthropic/claude-3-5-sonnet',
@@ -85,7 +95,7 @@ def run_examples():
         )
         if claude_response:
             print('Response:', claude_response['choices'][0]['message']['content'])
-        
+
         # Example 3: OpenAI GPT-4o
         print('\n3. OpenAI GPT-4o')
         print('----------------')
@@ -95,7 +105,7 @@ def run_examples():
         )
         if gpt_response:
             print('Response:', gpt_response['choices'][0]['message']['content'])
-            
+
     except Exception as e:
         print(f"Error running examples: {e}")
 

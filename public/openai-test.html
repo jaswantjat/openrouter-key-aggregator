@@ -17,7 +17,7 @@
       max-height: 400px;
       overflow-y: auto;
     }
-    
+
     .model-select {
       width: 100%;
       padding: 8px;
@@ -25,7 +25,7 @@
       border-radius: 4px;
       border: 1px solid #ced4da;
     }
-    
+
     .prompt-textarea {
       width: 100%;
       min-height: 100px;
@@ -43,10 +43,10 @@
       <h1>OpenRouter API Key Aggregator - OpenAI SDK Tester</h1>
       <a href="/admin.html" class="btn btn-primary">Back to Admin</a>
     </div>
-    
+
     <!-- Alert Container -->
     <div id="alert-container"></div>
-    
+
     <!-- Test Form -->
     <div class="card">
       <div class="card-header">
@@ -58,11 +58,18 @@
             <label for="api-key">API Key</label>
             <input type="text" id="api-key" class="form-control" placeholder="Enter your API key" required>
           </div>
-          
+
           <div class="form-group">
             <label for="model">Model</label>
             <select id="model" class="model-select" required>
               <option value="">Select a model</option>
+              <optgroup label="Free Models (Recommended)">
+                <option value="meta-llama/llama-4-maverick:free">Llama 4 Maverick (Free)</option>
+                <option value="meta-llama/llama-4-scout:free">Llama 4 Scout (Free)</option>
+                <option value="google/gemini-2.5-pro-exp-03-25:free">Gemini 2.5 Pro Exp (Free)</option>
+                <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek Chat v3 (Free)</option>
+                <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash Exp (Free)</option>
+              </optgroup>
               <optgroup label="Google">
                 <option value="google/gemini-2.5-pro-preview-03-25">Gemini 2.5 Pro Preview</option>
                 <option value="google/gemini-1.5-pro">Gemini 1.5 Pro</option>
@@ -85,37 +92,37 @@
               </optgroup>
             </select>
           </div>
-          
+
           <div class="form-group">
             <label for="prompt">Prompt</label>
             <textarea id="prompt" class="prompt-textarea" placeholder="Enter your prompt" required>Hello, how are you today?</textarea>
           </div>
-          
+
           <div class="form-group">
             <label>Endpoint Format</label>
             <div>
               <label>
-                <input type="radio" name="endpoint-format" value="openrouter" checked> 
+                <input type="radio" name="endpoint-format" value="openrouter" checked>
                 OpenRouter Format (/api/proxy/chat/completions)
               </label>
               <br>
               <label>
-                <input type="radio" name="endpoint-format" value="openai"> 
+                <input type="radio" name="endpoint-format" value="openai">
                 OpenAI SDK Format (/api/v1/chat/completions)
               </label>
             </div>
           </div>
-          
+
           <button type="submit" class="btn btn-primary" id="submit-btn">
             <span id="spinner" class="spinner hidden"></span>
             <span id="btn-text">Send Request</span>
           </button>
         </form>
-        
+
         <div id="response-container" class="response-container hidden"></div>
       </div>
     </div>
-    
+
     <!-- Connection Info -->
     <div class="card mt-4">
       <div class="card-header">
@@ -130,7 +137,7 @@
       </div>
     </div>
   </div>
-  
+
   <script>
     // DOM Elements
     const testForm = document.getElementById('test-form');
@@ -146,11 +153,11 @@
     const endpointSpan = document.getElementById('endpoint');
     const fullUrlSpan = document.getElementById('full-url');
     const headersPreEl = document.getElementById('headers');
-    
+
     // Get base URL
     const baseUrl = window.location.origin;
     baseUrlSpan.textContent = baseUrl;
-    
+
     // Event Listeners
     document.addEventListener('DOMContentLoaded', () => {
       // Check for API key in URL parameters
@@ -159,66 +166,66 @@
       if (apiKey) {
         apiKeyInput.value = apiKey;
       }
-      
+
       // Update endpoint display when format changes
       const formatRadios = document.getElementsByName('endpoint-format');
       formatRadios.forEach(radio => {
         radio.addEventListener('change', updateEndpointDisplay);
       });
-      
+
       // Initial endpoint display
       updateEndpointDisplay();
-      
+
       // Test form submission
       testForm.addEventListener('submit', handleTestRequest);
     });
-    
+
     // Functions
     function updateEndpointDisplay() {
       const format = document.querySelector('input[name="endpoint-format"]:checked').value;
       let endpoint;
-      
+
       if (format === 'openrouter') {
         endpoint = '/api/proxy/chat/completions';
       } else {
         endpoint = '/api/v1/chat/completions';
       }
-      
+
       endpointSpan.textContent = endpoint;
       fullUrlSpan.textContent = `${baseUrl}${endpoint}`;
     }
-    
+
     async function handleTestRequest(event) {
       event.preventDefault();
-      
+
       const apiKey = apiKeyInput.value;
       const model = modelSelect.value;
       const prompt = promptTextarea.value;
       const format = document.querySelector('input[name="endpoint-format"]:checked').value;
-      
+
       if (!apiKey || !model || !prompt) {
         showAlert('Please fill in all fields', 'danger');
         return;
       }
-      
+
       // Determine endpoint based on format
       const endpoint = format === 'openrouter' ? '/api/proxy/chat/completions' : '/api/v1/chat/completions';
-      
+
       // Show loading state
       spinner.classList.remove('hidden');
       btnText.textContent = 'Sending...';
       submitBtn.disabled = true;
       responseContainer.classList.add('hidden');
-      
+
       // Prepare headers
       const headers = {
         'Content-Type': 'application/json',
         'X-API-Key': apiKey
       };
-      
+
       // Display headers
       headersPreEl.textContent = JSON.stringify(headers, null, 2);
-      
+
       try {
         const response = await fetch(`${baseUrl}${endpoint}`, {
           method: 'POST',
@@ -230,18 +237,18 @@
             ]
           })
         });
-        
+
         const data = await response.json();
-        
+
         // Display response
         responseContainer.classList.remove('hidden');
-        
+
         if (!response.ok) {
           responseContainer.innerHTML = `<span style="color: red;">Error ${response.status}:</span>\n${JSON.stringify(data, null, 2)}`;
           showAlert(`Request failed with status: ${response.status}`, 'danger');
         } else {
           responseContainer.innerHTML = JSON.stringify(data, null, 2);
-          
+
           // Extract and display the actual response content
           if (data.choices && data.choices[0] && data.choices[0].message) {
             const content = data.choices[0].message.content;
@@ -262,14 +269,14 @@
         submitBtn.disabled = false;
       }
     }
-    
+
     function showAlert(message, type, timeout = 5000) {
       const alert = document.createElement('div');
       alert.className = `alert alert-${type}`;
       alert.innerHTML = message;
-      
+
       alertContainer.appendChild(alert);
-      
+
       if (timeout > 0) {
         setTimeout(() => {
           alert.remove();

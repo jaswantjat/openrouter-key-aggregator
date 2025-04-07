@@ -1,6 +1,6 @@
 # OpenRouter API Key Aggregator
 
-A service that manages multiple OpenRouter API keys to bypass the 200 requests per day limit by distributing requests across multiple keys. Works with all models available on OpenRouter.
+A service that manages multiple OpenRouter API keys to bypass the 200 requests per day limit by distributing requests across multiple keys. Works with all models available on OpenRouter, including free models like Llama 4 Maverick, Llama 4 Scout, Gemini 2.5 Pro Exp, DeepSeek Chat v3, and Gemini 2.0 Flash Exp.
 
 ## Features
 
@@ -155,12 +155,19 @@ client = OpenAI(
   }
 )
 
+# Example using a free model
 completion = client.chat.completions.create(
-  model="google/gemini-2.5-pro-preview-03-25",
+  model="meta-llama/llama-4-maverick:free",  # Free model
   messages=[
     {"role": "user", "content": "Hello, how are you?"}
   ]
 )
+
+# Or try other free models:
+# model="meta-llama/llama-4-scout:free"
+# model="google/gemini-2.5-pro-exp-03-25:free"
+# model="deepseek/deepseek-chat-v3-0324:free"
+# model="google/gemini-2.0-flash-exp:free"
 
 print(completion.choices[0].message.content)
 ```
