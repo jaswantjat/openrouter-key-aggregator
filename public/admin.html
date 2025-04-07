@@ -11,7 +11,7 @@
   <div class="container">
     <!-- Alert Container -->
     <div id="alert-container"></div>
-    
+
     <!-- Login Form -->
     <div id="login-form" class="card">
       <div class="card-header">
@@ -29,14 +29,17 @@
         <button type="submit" class="btn btn-primary">Login</button>
       </form>
     </div>
-    
+
     <!-- Admin Panel -->
     <div id="admin-panel" class="hidden">
       <div class="header">
         <h1>OpenRouter API Key Aggregator - Admin Dashboard</h1>
-        <button id="logout-btn" class="btn btn-danger">Logout</button>
+        <div>
+          <a href="/test-client.html" class="btn btn-primary" style="margin-right: 10px;">Test Client</a>
+          <button id="logout-btn" class="btn btn-danger">Logout</button>
+        </div>
       </div>
-      
+
       <!-- API Keys Section -->
       <div class="card">
         <div class="card-header">
@@ -71,7 +74,7 @@
           </table>
         </div>
       </div>
-      
+
       <!-- Status Section -->
       <div class="card">
         <div class="card-header">
@@ -91,7 +94,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- New API Key Modal -->
     <div id="new-key-modal" class="modal">
       <div class="modal-content">
@@ -115,7 +118,7 @@
       </div>
     </div>
   </div>
-  
+
   <script src="js/admin.js"></script>
 </body>
 </html>

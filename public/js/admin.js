@@ -61,35 +61,35 @@ document.addEventListener('DOMContentLoaded', () => {
 // Functions
 async function handleLogin(event) {
   event.preventDefault();
-  
+
   const username = document.getElementById('username').value;
   const password = document.getElementById('password').value;
-  
+
   if (!username || !password) {
     showAlert('Please enter both username and password', 'danger');
     return;
   }
-  
+
   try {
     // Create Basic Auth token
     authToken = btoa(`${username}:${password}`);
-    
+
     // Test the credentials by making a request
     const response = await fetch(`${apiBaseUrl}/keys`, {
       headers: {
         'Authorization': `Basic ${authToken}`
       }
     });
-    
+
     if (response.ok) {
       // Save token to localStorage
       localStorage.setItem('authToken', authToken);
-      
+
       // Show admin panel
       showAdminPanel();
       loadApiKeys();
       loadStatus();
-      
+
       showAlert('Login successful', 'success');
     } else {
       showAlert('Invalid credentials', 'danger');
@@ -111,24 +111,24 @@ function handleLogout() {
 
 async function loadApiKeys() {
   if (!authToken) return;
-  
+
   try {
     const spinner = document.getElementById('keys-spinner');
     spinner.classList.remove('hidden');
-    
+
     const response = await fetch(`${apiBaseUrl}/keys`, {
       headers: {
         'Authorization': `Basic ${authToken}`
       }
     });
-    
+
     if (response.ok) {
       const data = await response.json();
       renderApiKeys(data.data);
     } else {
       showAlert('Failed to load API keys', 'danger');
     }
-    
+
     spinner.classList.add('hidden');
   } catch (error) {
     console.error('Error loading API keys:', error);
@@ -139,24 +139,24 @@ async function loadApiKeys() {
 
 async function loadStatus() {
   if (!authToken) return;
-  
+
   try {
     const spinner = document.getElementById('status-spinner');
     spinner.classList.remove('hidden');
-    
+
     const response = await fetch(`${apiBaseUrl}/status`, {
       headers: {
         'Authorization': `Basic ${authToken}`
       }
     });
-    
+
     if (response.ok) {
       const data = await response.json();
       renderStatus(data);
     } else {
       showAlert('Failed to load status', 'danger');
     }
-    
+
     spinner.classList.add('hidden');
   } catch (error) {
     console.error('Error loading status:', error);
@@ -167,15 +167,15 @@ async function loadStatus() {
 
 async function handleNewKey(event) {
   event.preventDefault();
-  
+
   const name = document.getElementById('key-name').value;
   const rateLimit = document.getElementById('rate-limit').value;
-  
+
   if (!name) {
     showAlert('Please enter a name for the API key', 'danger');
     return;
   }
-  
+
   try {
     const response = await fetch(`${apiBaseUrl}/keys`, {
       method: 'POST',
@@ -188,24 +188,24 @@ async function handleNewKey(event) {
         rateLimit: parseInt(rateLimit) || 0
       })
     });
-    
+
     if (response.ok) {
       const data = await response.json();
-      
+
       // Show the new key in a success message
       showAlert(`
         <strong>API Key generated successfully!</strong><br>
         Name: ${data.data.name}<br>
-        Key: <span class="key-value">${data.data.key}</span> 
+        Key: <span class="key-value">${data.data.key}</span>
         <i class="fas fa-copy copy-btn" onclick="copyToClipboard('${data.data.key}')"></i><br>
         <strong>Make sure to copy this key now. You won't be able to see it again!</strong>
       `, 'success', 0); // 0 means don't auto-hide
-      
+
       // Reset form and close modal
       document.getElementById('key-name').value = '';
       document.getElementById('rate-limit').value = '';
       newKeyModal.style.display = 'none';
-      
+
       // Reload API keys
       loadApiKeys();
     } else {
@@ -222,7 +222,7 @@ async function revokeApiKey(key) {
   if (!confirm('Are you sure you want to revoke this API key? This action cannot be undone.')) {
     return;
   }
-  
+
   try {
     const response = await fetch(`${apiBaseUrl}/keys/${key}`, {
       method: 'DELETE',
@@ -230,7 +230,7 @@ async function revokeApiKey(key) {
         'Authorization': `Basic ${authToken}`
       }
     });
-    
+
     if (response.ok) {
       showAlert('API key revoked successfully', 'success');
       loadApiKeys();
@@ -246,7 +246,7 @@ async function revokeApiKey(key) {
 
 function renderApiKeys(keys) {
   apiKeysTableBody.innerHTML = '';
-  
+
   if (!keys || keys.length === 0) {
     apiKeysTableBody.innerHTML = `
       <tr>
@@ -255,27 +255,28 @@ function renderApiKeys(keys) {
     `;
     return;
   }
-  
+
   keys.forEach(key => {
     const row = document.createElement('tr');
-    
+
     row.innerHTML = `
       <td>${key.name}</td>
       <td><span class="key-value">${key.key}</span> <i class="fas fa-copy copy-btn" onclick="copyToClipboard('${key.key}')"></i></td>
       <td>${key.rateLimit > 0 ? key.rateLimit + ' req/min' : 'Unlimited'}</td>
       <td>${key.lastUsed ? new Date(key.lastUsed).toLocaleString() : 'Never'}</td>
       <td class="actions">
+        <a href="/test-client.html?api_key=${key.key.replace(/\.\.\./g, '')}" class="btn btn-primary btn-sm" style="margin-right: 5px;">Test</a>
         <button class="btn btn-danger btn-sm" onclick="revokeApiKey('${key.key.replace(/\.\.\./g, '')}')">Revoke</button>
       </td>
     `;
-    
+
     apiKeysTableBody.appendChild(row);
   });
 }
 
 function renderStatus(data) {
   statusContainer.innerHTML = '';
-  
+
   // Create summary card
   const summaryCard = document.createElement('div');
   summaryCard.className = 'card mb-4';
@@ -297,11 +298,11 @@ function renderStatus(data) {
     </div>
   `;
   statusContainer.appendChild(summaryCard);
-  
+
   // Create keys table
   const keysCard = document.createElement('div');
   keysCard.className = 'card';
-  
+
   let keysHtml = `
     <div class="card-header">
       <h2>OpenRouter API Keys Status</h2>
@@ -319,13 +320,13 @@ function renderStatus(data) {
         </thead>
         <tbody>
   `;
-  
+
   if (data.keys && data.keys.length > 0) {
     data.keys.forEach(key => {
-      const status = key.disabled ? 
-        '<span class="badge badge-danger">Disabled</span>' : 
+      const status = key.disabled ?
+        '<span class="badge badge-danger">Disabled</span>' :
         '<span class="badge badge-success">Active</span>';
-      
+
       keysHtml += `
         <tr>
           <td>${key.key}</td>
@@ -343,13 +344,13 @@ function renderStatus(data) {
       </tr>
     `;
   }
-  
+
   keysHtml += `
         </tbody>
       </table>
     </div>
   `;
-  
+
   keysCard.innerHTML = keysHtml;
   statusContainer.appendChild(keysCard);
 }
@@ -368,9 +369,9 @@ function showAlert(message, type, timeout = 5000) {
   const alert = document.createElement('div');
   alert.className = `alert alert-${type}`;
   alert.innerHTML = message;
-  
+
   alertContainer.appendChild(alert);
-  
+
   if (timeout > 0) {
     setTimeout(() => {
       alert.remove();
@@ -384,14 +385,14 @@ function copyToClipboard(text) {
   const input = document.createElement('input');
   input.value = text;
   document.body.appendChild(input);
-  
+
   // Select and copy the text
   input.select();
   document.execCommand('copy');
-  
+
   // Remove the temporary element
   document.body.removeChild(input);
-  
+
   // Show a success message
   showAlert('Copied to clipboard!', 'info', 2000);
 }

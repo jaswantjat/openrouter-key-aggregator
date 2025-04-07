@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Key Tester - OpenRouter API Key Aggregator</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    .response-container {
+      background-color: #f5f5f5;
+      border-radius: 4px;
+      padding: 15px;
+      margin-top: 20px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    
+    .model-select {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 15px;
+      border-radius: 4px;
+      border: 1px solid #ced4da;
+    }
+    
+    .prompt-textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 8px;
+      margin-bottom: 15px;
+      border-radius: 4px;
+      border: 1px solid #ced4da;
+      font-family: inherit;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>OpenRouter API Key Aggregator - API Key Tester</h1>
+      <a href="/admin.html" class="btn btn-primary">Back to Admin</a>
+    </div>
+    
+    <!-- Alert Container -->
+    <div id="alert-container"></div>
+    
+    <!-- Test Form -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Test Your API Key</h2>
+      </div>
+      <div class="card-body">
+        <form id="test-form">
+          <div class="form-group">
+            <label for="api-key">API Key</label>
+            <input type="text" id="api-key" class="form-control" placeholder="Enter your API key" required>
+          </div>
+          
+          <div class="form-group">
+            <label for="model">Model</label>
+            <select id="model" class="model-select" required>
+              <option value="">Select a model</option>
+              <optgroup label="Google">
+                <option value="google/gemini-2.5-pro-preview-03-25">Gemini 2.5 Pro Preview</option>
+                <option value="google/gemini-1.5-pro">Gemini 1.5 Pro</option>
+                <option value="google/gemini-1.5-flash">Gemini 1.5 Flash</option>
+              </optgroup>
+              <optgroup label="Anthropic">
+                <option value="anthropic/claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+                <option value="anthropic/claude-3-opus">Claude 3 Opus</option>
+                <option value="anthropic/claude-3-sonnet">Claude 3 Sonnet</option>
+                <option value="anthropic/claude-3-haiku">Claude 3 Haiku</option>
+              </optgroup>
+              <optgroup label="OpenAI">
+                <option value="openai/gpt-4o">GPT-4o</option>
+                <option value="openai/gpt-4-turbo">GPT-4 Turbo</option>
+                <option value="openai/gpt-3.5-turbo">GPT-3.5 Turbo</option>
+              </optgroup>
+              <optgroup label="Meta">
+                <option value="meta/llama-3-70b-instruct">Llama 3 70B Instruct</option>
+                <option value="meta/llama-3-8b-instruct">Llama 3 8B Instruct</option>
+              </optgroup>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label for="prompt">Prompt</label>
+            <textarea id="prompt" class="prompt-textarea" placeholder="Enter your prompt" required>Hello, how are you today?</textarea>
+          </div>
+          
+          <button type="submit" class="btn btn-primary" id="submit-btn">
+            <span id="spinner" class="spinner hidden"></span>
+            <span id="btn-text">Send Request</span>
+          </button>
+        </form>
+        
+        <div id="response-container" class="response-container hidden"></div>
+      </div>
+    </div>
+    
+    <!-- Connection Info -->
+    <div class="card mt-4">
+      <div class="card-header">
+        <h2>Connection Information</h2>
+      </div>
+      <div class="card-body">
+        <p><strong>Base URL:</strong> <span id="base-url"></span></p>
+        <p><strong>Endpoint:</strong> <span id="endpoint">/api/proxy/chat/completions</span></p>
+        <p><strong>Full Request URL:</strong> <span id="full-url"></span></p>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // DOM Elements
+    const testForm = document.getElementById('test-form');
+    const apiKeyInput = document.getElementById('api-key');
+    const modelSelect = document.getElementById('model');
+    const promptTextarea = document.getElementById('prompt');
+    const submitBtn = document.getElementById('submit-btn');
+    const spinner = document.getElementById('spinner');
+    const btnText = document.getElementById('btn-text');
+    const responseContainer = document.getElementById('response-container');
+    const alertContainer = document.getElementById('alert-container');
+    const baseUrlSpan = document.getElementById('base-url');
+    const fullUrlSpan = document.getElementById('full-url');
+    
+    // Get base URL
+    const baseUrl = window.location.origin;
+    baseUrlSpan.textContent = baseUrl;
+    fullUrlSpan.textContent = `${baseUrl}/api/proxy/chat/completions`;
+    
+    // Event Listeners
+    document.addEventListener('DOMContentLoaded', () => {
+      // Check for API key in URL parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const apiKey = urlParams.get('api_key');
+      if (apiKey) {
+        apiKeyInput.value = apiKey;
+      }
+      
+      // Test form submission
+      testForm.addEventListener('submit', handleTestRequest);
+    });
+    
+    // Functions
+    async function handleTestRequest(event) {
+      event.preventDefault();
+      
+      const apiKey = apiKeyInput.value;
+      const model = modelSelect.value;
+      const prompt = promptTextarea.value;
+      
+      if (!apiKey || !model || !prompt) {
+        showAlert('Please fill in all fields', 'danger');
+        return;
+      }
+      
+      // Show loading state
+      spinner.classList.remove('hidden');
+      btnText.textContent = 'Sending...';
+      submitBtn.disabled = true;
+      responseContainer.classList.add('hidden');
+      
+      try {
+        const response = await fetch(`${baseUrl}/api/proxy/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKey
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [
+              { role: 'user', content: prompt }
+            ]
+          })
+        });
+        
+        const data = await response.json();
+        
+        // Display response
+        responseContainer.classList.remove('hidden');
+        
+        if (!response.ok) {
+          responseContainer.innerHTML = `<span style="color: red;">Error ${response.status}:</span>\n${JSON.stringify(data, null, 2)}`;
+          showAlert(`Request failed with status: ${response.status}`, 'danger');
+        } else {
+          responseContainer.innerHTML = JSON.stringify(data, null, 2);
+          
+          // Extract and display the actual response content
+          if (data.choices && data.choices[0] && data.choices[0].message) {
+            const content = data.choices[0].message.content;
+            showAlert(`Success! Response: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`, 'success');
+          } else {
+            showAlert('Request successful!', 'success');
+          }
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        responseContainer.classList.remove('hidden');
+        responseContainer.innerHTML = `<span style="color: red;">Error:</span>\n${error.message}`;
+        showAlert(`Error: ${error.message}`, 'danger');
+      } finally {
+        // Reset loading state
+        spinner.classList.add('hidden');
+        btnText.textContent = 'Send Request';
+        submitBtn.disabled = false;
+      }
+    }
+    
+    function showAlert(message, type, timeout = 5000) {
+      const alert = document.createElement('div');
+      alert.className = `alert alert-${type}`;
+      alert.innerHTML = message;
+      
+      alertContainer.appendChild(alert);
+      
+      if (timeout > 0) {
+        setTimeout(() => {
+          alert.remove();
+        }, timeout);
+      }
+    }
+  </script>
+</body>
+</html>
