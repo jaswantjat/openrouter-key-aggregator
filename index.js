@@ -6,6 +6,9 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
+// Import controllers
+const modelsController = require('./src/controllers/modelsController');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -295,129 +298,39 @@ function apiKeyAuth(req, res, next) {
 }
 
 // Explicit route for /models (n8n compatibility)
-app.get('/models', (req, res) => {
+app.get('/models', apiKeyAuth, (req, res) => {
   console.log('[DEBUG] Direct /models route hit');
-
-  // Return a list of models in OpenAI format
-  res.json({
-    object: "list",
-    data: [
-      {
-        id: "meta-llama/llama-4-maverick:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "meta-llama"
-      },
-      {
-        id: "meta-llama/llama-4-scout:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "meta-llama"
-      },
-      {
-        id: "google/gemini-2.5-pro-exp-03-25:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "google"
-      },
-      {
-        id: "deepseek/deepseek-chat-v3-0324:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "deepseek"
-      },
-      {
-        id: "google/gemini-2.0-flash-exp:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "google"
-      }
-    ]
-  });
+  modelsController.getModels(req, res);
 });
 
 // Explicit route for /v1/models
-app.get('/v1/models', (req, res) => {
+app.get('/v1/models', apiKeyAuth, (req, res) => {
   console.log('[DEBUG] Direct /v1/models route hit');
+  modelsController.getModels(req, res);
+});
 
-  // Return a list of models in OpenAI format
-  res.json({
-    object: "list",
-    data: [
-      {
-        id: "meta-llama/llama-4-maverick:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "meta-llama"
-      },
-      {
-        id: "meta-llama/llama-4-scout:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "meta-llama"
-      },
-      {
-        id: "google/gemini-2.5-pro-exp-03-25:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "google"
-      },
-      {
-        id: "deepseek/deepseek-chat-v3-0324:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "deepseek"
-      },
-      {
-        id: "google/gemini-2.0-flash-exp:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "google"
-      }
-    ]
-  });
+// Explicit route for /v1/models/:model
+app.get('/v1/models/:model', apiKeyAuth, (req, res) => {
+  console.log(`[DEBUG] Direct /v1/models/${req.params.model} route hit`);
+  modelsController.getModel(req, res);
 });
 
 // Explicit route for /api/v1/models
-app.get('/api/v1/models', (req, res) => {
+app.get('/api/v1/models', apiKeyAuth, (req, res) => {
   console.log('[DEBUG] Direct /api/v1/models route hit');
+  modelsController.getModels(req, res);
+});
 
-  // Return a list of models in OpenAI format
-  res.json({
-    object: "list",
-    data: [
-      {
-        id: "meta-llama/llama-4-maverick:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "meta-llama"
-      },
-      {
-        id: "meta-llama/llama-4-scout:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "meta-llama"
-      },
-      {
-        id: "google/gemini-2.5-pro-exp-03-25:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "google"
-      },
-      {
-        id: "deepseek/deepseek-chat-v3-0324:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "deepseek"
-      },
-      {
-        id: "google/gemini-2.0-flash-exp:free",
-        object: "model",
-        created: 1714348800,
-        owned_by: "google"
-      }
-    ]
-  });
+// Explicit route for /api/v1/models/:model
+app.get('/api/v1/models/:model', apiKeyAuth, (req, res) => {
+  console.log(`[DEBUG] Direct /api/v1/models/${req.params.model} route hit`);
+  modelsController.getModel(req, res);
+});
+
+// Explicit route for /models/:model
+app.get('/models/:model', apiKeyAuth, (req, res) => {
+  console.log(`[DEBUG] Direct /models/${req.params.model} route hit`);
+  modelsController.getModel(req, res);
 });
 
 // Proxy function
