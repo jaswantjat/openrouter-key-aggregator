@@ -20,15 +20,18 @@ A service that manages multiple OpenRouter API keys to bypass the 200 requests p
    ```
    npm install
    ```
-3. Create a `.env` file with your OpenRouter API keys:
+3. Copy the `.env.example` file to `.env` and add your OpenRouter API keys:
    ```
-   OPENROUTER_API_KEYS=key1,key2,key3
-   PORT=3000
-   AUTH_ENABLED=false
-   AUTH_USERNAME=admin
-   AUTH_PASSWORD=password
-   OPENROUTER_API_URL=https://openrouter.ai/api/v1
+   cp .env.example .env
    ```
+
+4. Edit the `.env` file and replace `your-openrouter-api-key-here` with your actual OpenRouter API key(s):
+   ```
+   # Get your API keys from https://openrouter.ai/keys
+   OPENROUTER_API_KEYS=sk-or-v1-your-key-here,sk-or-v1-another-key-here
+   ```
+
+   You can add multiple keys separated by commas. The service will rotate between them to maximize your daily request limit.
 
 ## Usage
 
@@ -211,11 +214,16 @@ google/gemini-2.0-flash-exp:free
 
 When configuring OpenAI credentials in n8n:
 
-1. **API Key**: Your API key generated from the admin dashboard
+1. **API Key**: Your API key generated from the admin dashboard (e.g., `258d989626459539c44ad77589a0e1f8`)
 2. **Base URL**: `https://your-service.onrender.com` (just the base URL without any path)
 3. **Organization ID**: Leave blank
 
 > **IMPORTANT**: For n8n specifically, use just the base URL without any path. n8n will automatically append the necessary paths. Do not include `/api` or `/v1` in the URL.
+>
+> If you're having trouble seeing the models in n8n, make sure:
+> 1. You've added at least one valid OpenRouter API key to your `.env` file
+> 2. Your client API key is correctly configured in the n8n OpenAI credentials
+> 3. The service is running and accessible from n8n
 
 #### Basic Authentication (For Admin Access)
 
