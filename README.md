@@ -212,38 +212,94 @@ google/gemini-2.0-flash-exp:free
 
 ### Using with n8n
 
-When configuring OpenAI credentials in n8n:
+When configuring OpenAI credentials in n8n, you need to use specific settings to ensure compatibility:
+
+#### Method 1: Using the Base URL with /api prefix (Recommended)
 
 1. **API Key**: Your API key generated from the admin dashboard (e.g., `258d989626459539c44ad77589a0e1f8`)
-2. **Base URL**: `https://your-service.onrender.com` (just the base URL without any path)
+2. **Base URL**: `https://your-service.onrender.com/api` (include the `/api` prefix)
 3. **Organization ID**: Leave blank
-
-> **IMPORTANT**: For n8n specifically, use just the base URL without any path. n8n will automatically append the necessary paths. Do not include `/api` or `/v1` in the URL.
-
-#### Troubleshooting "Models not found" in n8n
-
-If you're seeing a "models not found" error in n8n, try these solutions:
-
-1. **Check your OpenRouter API key**: Make sure you've added at least one valid OpenRouter API key to your `.env` file. The key should start with `sk-or-v1-`.
-
-2. **Verify your client API key**: Make sure the API key you're using in n8n is correctly configured and active in your service.
-
-3. **Try different header formats**: n8n might be sending the API key in a different format. In your n8n OpenAI credentials, try adding these custom headers:
+4. **Custom Headers**: Add the following custom headers:
    ```json
    {
      "x-api-key": "YOUR_API_KEY_HERE"
    }
    ```
 
-4. **Check CORS settings**: Make sure your n8n instance can access your service. If you're running n8n locally, make sure it can access your deployed service or local service.
+#### Method 2: Using the Base URL without /api prefix
 
-5. **Test the models endpoint directly**: Use curl or Postman to test the models endpoint directly:
+1. **API Key**: Your API key generated from the admin dashboard (e.g., `258d989626459539c44ad77589a0e1f8`)
+2. **Base URL**: `https://your-service.onrender.com` (without any path)
+3. **Organization ID**: Leave blank
+4. **Custom Headers**: Add the following custom headers:
+   ```json
+   {
+     "x-api-key": "YOUR_API_KEY_HERE"
+   }
+   ```
+
+#### Method 3: Using LangChain Configuration
+
+If you're using LangChain directly (not through n8n), you can configure it like this:
+
+```javascript
+import { ChatOpenAI } from "@langchain/openai";
+
+const llm = new ChatOpenAI({
+  temperature: 0.9,
+  streamUsage: false, // Important for compatibility with some proxies
+  configuration: {
+    baseURL: "https://your-service.onrender.com/api",
+    defaultHeaders: {
+      "x-api-key": "YOUR_API_KEY_HERE"
+    }
+  }
+});
+
+await llm.invoke("Hi there!");
+```
+
+#### Troubleshooting "Models not found" in n8n
+
+If you're seeing a "models not found" error in n8n, try these solutions:
+
+1. **Use the correct base URL**: Make sure you're using `https://your-service.onrender.com/api` as the base URL (with the `/api` prefix).
+
+2. **Add custom headers**: In your n8n OpenAI credentials, add these custom headers:
+   ```json
+   {
+     "x-api-key": "YOUR_API_KEY_HERE"
+   }
+   ```
+
+3. **Check your OpenRouter API key**: Make sure you've added at least one valid OpenRouter API key to your `.env` file. The key should start with `sk-or-v1-`.
+
+4. **Verify your client API key**: Make sure the API key you're using in n8n is correctly configured and active in your service.
+
+5. **Test the endpoints directly**: Use curl to test the endpoints directly:
    ```bash
-   curl -X GET https://your-service.onrender.com/v1/models \
+   # Test the models endpoint
+   curl -X GET https://your-service.onrender.com/api/v1/models \
      -H "x-api-key: YOUR_API_KEY_HERE"
+
+   # Test the chat completions endpoint
+   curl -X POST https://your-service.onrender.com/api/v1/chat/completions \
+     -H "Content-Type: application/json" \
+     -H "x-api-key: YOUR_API_KEY_HERE" \
+     -d '{
+       "model": "meta-llama/llama-4-scout:free",
+       "messages": [
+         {
+           "role": "user",
+           "content": "What is the capital of Italy?"
+         }
+       ]
+     }'
    ```
 
 6. **Restart your service**: Sometimes a simple restart of your service can fix the issue.
+
+7. **Check n8n logs**: Look at the n8n logs to see what URL it's trying to access and what errors it's encountering.
 
 #### Basic Authentication (For Admin Access)
 
