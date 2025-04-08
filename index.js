@@ -407,9 +407,11 @@ async function proxyRequest(req, res) {
 
       // Get the list of available models
       const models = await modelsController.getModelsData();
+      console.log(`[DEBUG] Available models: ${models.map(m => m.id).join(', ')}`);
 
       // Try exact match first
       let matchedModel = models.find(m => m.id === requestData.model);
+      console.log(`[DEBUG] Exact match result: ${matchedModel ? matchedModel.id : 'No match'}`);
 
       // If not found, try more flexible matching
       if (!matchedModel) {
@@ -417,28 +419,61 @@ async function proxyRequest(req, res) {
         if (requestData.model.includes(':free')) {
           const baseModelId = requestData.model.split(':')[0];
           matchedModel = models.find(m => m.id.startsWith(baseModelId));
+          console.log(`[DEBUG] Without :free suffix match result: ${matchedModel ? matchedModel.id : 'No match'}`);
         }
         // Try with the :free suffix
         else {
           matchedModel = models.find(m => m.id.startsWith(requestData.model + ':'));
+          console.log(`[DEBUG] With :free suffix match result: ${matchedModel ? matchedModel.id : 'No match'}`);
+
+          // Also try with just the model name (without provider)
+          if (!matchedModel && !requestData.model.includes('/')) {
+            // Try to match any model that ends with the requested model name
+            const modelMatches = models.filter(m => {
+              const parts = m.id.split('/');
+              if (parts.length > 1) {
+                const modelPart = parts[1].split(':')[0]; // Remove :free suffix if present
+                return modelPart === requestData.model;
+              }
+              return false;
+            });
+
+            console.log(`[DEBUG] Model name only matches: ${modelMatches.map(m => m.id).join(', ')}`);
+
+            if (modelMatches.length > 0) {
+              // Prefer free models
+              const freeModel = modelMatches.find(m => m.id.includes(':free'));
+              matchedModel = freeModel || modelMatches[0];
+              console.log(`[DEBUG] Selected model from name-only matches: ${matchedModel.id}`);
+            }
+          }
         }
 
         // Try case-insensitive match
         if (!matchedModel) {
           const lowerModelId = requestData.model.toLowerCase();
           matchedModel = models.find(m => m.id.toLowerCase().includes(lowerModelId));
+          console.log(`[DEBUG] Case-insensitive match result: ${matchedModel ? matchedModel.id : 'No match'}`);
         }
 
         // Try matching just the model name without provider
         if (!matchedModel && requestData.model.includes('/')) {
           const modelName = requestData.model.split('/')[1];
           matchedModel = models.find(m => m.id.includes(modelName));
+          console.log(`[DEBUG] Model name match result: ${matchedModel ? matchedModel.id : 'No match'}`);
+        }
+
+        // Special case for gemini models
+        if (!matchedModel && requestData.model.toLowerCase().includes('gemini')) {
+          // Find any gemini model
+          matchedModel = models.find(m => m.id.toLowerCase().includes('gemini'));
+          console.log(`[DEBUG] Gemini special case match result: ${matchedModel ? matchedModel.id : 'No match'}`);
         }
       }
 
       // If we found a match, use the exact model ID
       if (matchedModel) {
-        console.log(`[DEBUG] Matched model: ${matchedModel.id}`);
+        console.log(`[DEBUG] Final matched model: ${matchedModel.id}`);
         requestData.model = matchedModel.id;
       } else {
         console.log(`[DEBUG] No match found for model: ${requestData.model}. Using as is.`);

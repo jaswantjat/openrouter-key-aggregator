@@ -111,7 +111,13 @@ const getModelsData = async () => {
  */
 const getModels = async (req, res) => {
   try {
+    console.log(`[DEBUG] getModels called with headers:`, JSON.stringify(req.headers));
+    console.log(`[DEBUG] getModels called with query:`, JSON.stringify(req.query));
+
     const models = await getModelsData();
+
+    // Log the models we're returning
+    console.log(`[DEBUG] Returning ${models.length} models:`, models.map(m => m.id).join(', '));
 
     res.json({
       object: "list",
