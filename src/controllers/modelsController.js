@@ -136,10 +136,40 @@ const getModels = async (req, res) => {
 const getModel = async (req, res) => {
   try {
     const modelId = req.params.model;
+    console.log(`[DEBUG] Requested model: '${modelId}'`);
+
     const models = await getModelsData();
-    const model = models.find(m => m.id === modelId);
+
+    // Try exact match first
+    let model = models.find(m => m.id === modelId);
+
+    // If not found, try more flexible matching
+    if (!model) {
+      // Try without the :free suffix
+      if (modelId.includes(':free')) {
+        const baseModelId = modelId.split(':')[0];
+        model = models.find(m => m.id.startsWith(baseModelId));
+      }
+      // Try with the :free suffix
+      else {
+        model = models.find(m => m.id.startsWith(modelId + ':'));
+      }
+
+      // Try case-insensitive match
+      if (!model) {
+        const lowerModelId = modelId.toLowerCase();
+        model = models.find(m => m.id.toLowerCase().includes(lowerModelId));
+      }
+
+      // Try matching just the model name without provider
+      if (!model && modelId.includes('/')) {
+        const modelName = modelId.split('/')[1];
+        model = models.find(m => m.id.includes(modelName));
+      }
+    }
 
     if (!model) {
+      console.log(`[DEBUG] Model '${modelId}' not found. Available models: ${models.map(m => m.id).join(', ')}`);
       return res.status(404).json({
         error: {
           message: `Model '${modelId}' not found`,
@@ -150,6 +180,7 @@ const getModel = async (req, res) => {
       });
     }
 
+    console.log(`[DEBUG] Found model: '${model.id}'`);
     res.json(model);
   } catch (error) {
     console.error('Error in getModel:', error.message);
@@ -166,5 +197,6 @@ const getModel = async (req, res) => {
 
 module.exports = {
   getModels,
-  getModel
+  getModel,
+  getModelsData
 };

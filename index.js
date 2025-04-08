@@ -398,12 +398,59 @@ async function proxyRequest(req, res) {
     console.log(`Proxying request to: ${process.env.OPENROUTER_API_URL}${endpoint}`);
     console.log(`Request model: ${req.body.model || 'Not specified'}`);
 
-    // Forward the request to OpenRouter with the original request body
+    // Make a copy of the request body to modify if needed
+    const requestData = { ...req.body };
+
+    // If a model is specified, ensure it's in the correct format
+    if (requestData.model) {
+      console.log(`[DEBUG] Original model requested: ${requestData.model}`);
+
+      // Get the list of available models
+      const models = await modelsController.getModelsData();
+
+      // Try exact match first
+      let matchedModel = models.find(m => m.id === requestData.model);
+
+      // If not found, try more flexible matching
+      if (!matchedModel) {
+        // Try without the :free suffix
+        if (requestData.model.includes(':free')) {
+          const baseModelId = requestData.model.split(':')[0];
+          matchedModel = models.find(m => m.id.startsWith(baseModelId));
+        }
+        // Try with the :free suffix
+        else {
+          matchedModel = models.find(m => m.id.startsWith(requestData.model + ':'));
+        }
+
+        // Try case-insensitive match
+        if (!matchedModel) {
+          const lowerModelId = requestData.model.toLowerCase();
+          matchedModel = models.find(m => m.id.toLowerCase().includes(lowerModelId));
+        }
+
+        // Try matching just the model name without provider
+        if (!matchedModel && requestData.model.includes('/')) {
+          const modelName = requestData.model.split('/')[1];
+          matchedModel = models.find(m => m.id.includes(modelName));
+        }
+      }
+
+      // If we found a match, use the exact model ID
+      if (matchedModel) {
+        console.log(`[DEBUG] Matched model: ${matchedModel.id}`);
+        requestData.model = matchedModel.id;
+      } else {
+        console.log(`[DEBUG] No match found for model: ${requestData.model}. Using as is.`);
+      }
+    }
+
+    // Forward the request to OpenRouter with the modified request body
     const response = await axios({
       method: req.method,
       url: `${process.env.OPENROUTER_API_URL}${endpoint}`,
       headers: headers,
-      data: req.body,
+      data: requestData,
       timeout: 120000 // 2 minute timeout
     });
 
