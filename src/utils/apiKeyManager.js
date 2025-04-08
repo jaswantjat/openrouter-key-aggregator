@@ -41,7 +41,8 @@ class ApiKeyManager {
     const testKeys = [
       '076b883862ef9163161e6ec19a376e68',
       '258d989626459539c44ad77589a0e1f8',
-      '8296e82c0f6b0d5cabbbb05bfddcad53'
+      '8296e82c0f6b0d5cabbbb05bfddcad53',
+      '51fa83450b6f92dd3606cad17d261d3d'
     ];
 
     testKeys.forEach((key, index) => {
