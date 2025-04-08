@@ -1,201 +1,167 @@
 /**
  * Controller for OpenAI-compatible models endpoint
  */
+const axios = require('axios');
+// No need to import getNextKey as we're using the first key from the environment variable
 
-// List of free models we support
-const FREE_MODELS = [
-  {
-    id: "meta-llama/llama-4-maverick:free",
-    object: "model",
-    created: 1714348800, // April 2025
-    owned_by: "meta-llama",
-    permission: [{
-      id: "modelperm-meta-llama-llama-4-maverick-free",
-      object: "model_permission",
-      created: 1714348800,
-      allow_create_engine: false,
-      allow_sampling: true,
-      allow_logprobs: true,
-      allow_search_indices: false,
-      allow_view: true,
-      allow_fine_tuning: false,
-      organization: "*",
-      group: null,
-      is_blocking: false
-    }],
-    root: "meta-llama/llama-4-maverick:free",
-    parent: null
-  },
-  {
-    id: "meta-llama/llama-4-scout:free",
-    object: "model",
-    created: 1714348800, // April 2025
-    owned_by: "meta-llama",
-    permission: [{
-      id: "modelperm-meta-llama-llama-4-scout-free",
-      object: "model_permission",
-      created: 1714348800,
-      allow_create_engine: false,
-      allow_sampling: true,
-      allow_logprobs: true,
-      allow_search_indices: false,
-      allow_view: true,
-      allow_fine_tuning: false,
-      organization: "*",
-      group: null,
-      is_blocking: false
-    }],
-    root: "meta-llama/llama-4-scout:free",
-    parent: null
-  },
-  {
-    id: "google/gemini-2.5-pro-exp-03-25:free",
-    object: "model",
-    created: 1714348800, // April 2025
-    owned_by: "google",
-    permission: [{
-      id: "modelperm-google-gemini-2.5-pro-exp-03-25-free",
-      object: "model_permission",
-      created: 1714348800,
-      allow_create_engine: false,
-      allow_sampling: true,
-      allow_logprobs: true,
-      allow_search_indices: false,
-      allow_view: true,
-      allow_fine_tuning: false,
-      organization: "*",
-      group: null,
-      is_blocking: false
-    }],
-    root: "google/gemini-2.5-pro-exp-03-25:free",
-    parent: null
-  },
-  {
-    id: "deepseek/deepseek-chat-v3-0324:free",
-    object: "model",
-    created: 1714348800, // April 2025
-    owned_by: "deepseek",
-    permission: [{
-      id: "modelperm-deepseek-deepseek-chat-v3-0324-free",
-      object: "model_permission",
-      created: 1714348800,
-      allow_create_engine: false,
-      allow_sampling: true,
-      allow_logprobs: true,
-      allow_search_indices: false,
-      allow_view: true,
-      allow_fine_tuning: false,
-      organization: "*",
-      group: null,
-      is_blocking: false
-    }],
-    root: "deepseek/deepseek-chat-v3-0324:free",
-    parent: null
-  },
-  {
-    id: "google/gemini-2.0-flash-exp:free",
-    object: "model",
-    created: 1714348800, // April 2025
-    owned_by: "google",
-    permission: [{
-      id: "modelperm-google-gemini-2.0-flash-exp-free",
-      object: "model_permission",
-      created: 1714348800,
-      allow_create_engine: false,
-      allow_sampling: true,
-      allow_logprobs: true,
-      allow_search_indices: false,
-      allow_view: true,
-      allow_fine_tuning: false,
-      organization: "*",
-      group: null,
-      is_blocking: false
-    }],
-    root: "google/gemini-2.0-flash-exp:free",
-    parent: null
-  }
+// Cache for models to avoid hitting OpenRouter API too frequently
+let modelsCache = null;
+let modelsCacheExpiry = 0;
+const CACHE_TTL = 3600000; // 1 hour in milliseconds
+
+// List of free models we want to ensure are always available
+const FREE_MODEL_IDS = [
+  "meta-llama/llama-4-maverick:free",
+  "meta-llama/llama-4-scout:free",
+  "google/gemini-2.5-pro-exp-03-25:free",
+  "deepseek/deepseek-chat-v3-0324:free",
+  "google/gemini-2.0-flash-exp:free"
 ];
 
-// Add some popular paid models
-const PAID_MODELS = [
-  {
-    id: "anthropic/claude-3-opus",
-    object: "model",
-    created: 1709596800, // March 2024
-    owned_by: "anthropic",
-    permission: [{
-      id: "modelperm-anthropic-claude-3-opus",
-      object: "model_permission",
-      created: 1709596800,
-      allow_create_engine: false,
-      allow_sampling: true,
-      allow_logprobs: true,
-      allow_search_indices: false,
-      allow_view: true,
-      allow_fine_tuning: false,
-      organization: "*",
-      group: null,
-      is_blocking: false
-    }],
-    root: "anthropic/claude-3-opus",
-    parent: null
-  },
-  {
-    id: "openai/gpt-4o",
-    object: "model",
-    created: 1714348800, // April 2025
-    owned_by: "openai",
-    permission: [{
-      id: "modelperm-openai-gpt-4o",
-      object: "model_permission",
-      created: 1714348800,
-      allow_create_engine: false,
-      allow_sampling: true,
-      allow_logprobs: true,
-      allow_search_indices: false,
-      allow_view: true,
-      allow_fine_tuning: false,
-      organization: "*",
-      group: null,
-      is_blocking: false
-    }],
-    root: "openai/gpt-4o",
-    parent: null
-  }
+// List of paid models we want to ensure are always available
+const PAID_MODEL_IDS = [
+  "anthropic/claude-3-opus",
+  "openai/gpt-4o"
 ];
 
-// Combine all models
-const ALL_MODELS = [...FREE_MODELS, ...PAID_MODELS];
+/**
+ * Convert OpenRouter model format to OpenAI format
+ */
+const convertToOpenAIFormat = (openRouterModels) => {
+  const openAIModels = [];
+
+  // Process all models from OpenRouter
+  if (openRouterModels && openRouterModels.data && Array.isArray(openRouterModels.data)) {
+    openRouterModels.data.forEach(model => {
+      // Only include models we're interested in
+      if (FREE_MODEL_IDS.includes(model.id) || PAID_MODEL_IDS.includes(model.id)) {
+        openAIModels.push({
+          id: model.id,
+          object: "model",
+          created: model.created || Math.floor(Date.now() / 1000),
+          owned_by: model.id.split('/')[0],
+          permission: [{
+            id: `modelperm-${model.id.replace(/\//g, '-').replace(/:/g, '-')}`,
+            object: "model_permission",
+            created: model.created || Math.floor(Date.now() / 1000),
+            allow_create_engine: false,
+            allow_sampling: true,
+            allow_logprobs: true,
+            allow_search_indices: false,
+            allow_view: true,
+            allow_fine_tuning: false,
+            organization: "*",
+            group: null,
+            is_blocking: false
+          }],
+          root: model.id,
+          parent: null
+        });
+      }
+    });
+  }
+
+  return openAIModels;
+};
+
+/**
+ * Fetch models from OpenRouter API
+ */
+const fetchModelsFromOpenRouter = async () => {
+  try {
+    // Get an OpenRouter API key
+    const openRouterKey = process.env.OPENROUTER_API_KEYS.split(',')[0];
+
+    // Fetch models from OpenRouter
+    const response = await axios.get('https://openrouter.ai/api/v1/models', {
+      headers: {
+        'Authorization': `Bearer ${openRouterKey}`
+      }
+    });
+
+    // Convert to OpenAI format
+    const openAIModels = convertToOpenAIFormat(response.data);
+
+    // Update cache
+    modelsCache = openAIModels;
+    modelsCacheExpiry = Date.now() + CACHE_TTL;
+
+    return openAIModels;
+  } catch (error) {
+    console.error('Error fetching models from OpenRouter:', error.message);
+    return [];
+  }
+};
+
+/**
+ * Get models from cache or fetch from OpenRouter
+ */
+const getModelsData = async () => {
+  // If cache is valid, return it
+  if (modelsCache && modelsCacheExpiry > Date.now()) {
+    return modelsCache;
+  }
+
+  // Otherwise, fetch from OpenRouter
+  return await fetchModelsFromOpenRouter();
+};
 
 /**
  * Get list of models
  */
-const getModels = (req, res) => {
-  res.json({
-    object: "list",
-    data: ALL_MODELS
-  });
+const getModels = async (req, res) => {
+  try {
+    const models = await getModelsData();
+
+    res.json({
+      object: "list",
+      data: models
+    });
+  } catch (error) {
+    console.error('Error in getModels:', error.message);
+    res.status(500).json({
+      error: {
+        message: 'Failed to retrieve models',
+        type: "server_error",
+        param: null,
+        code: "models_unavailable"
+      }
+    });
+  }
 };
 
 /**
  * Get a specific model
  */
-const getModel = (req, res) => {
-  const modelId = req.params.model;
-  const model = ALL_MODELS.find(m => m.id === modelId);
-  
-  if (!model) {
-    return res.status(404).json({
+const getModel = async (req, res) => {
+  try {
+    const modelId = req.params.model;
+    const models = await getModelsData();
+    const model = models.find(m => m.id === modelId);
+
+    if (!model) {
+      return res.status(404).json({
+        error: {
+          message: `Model '${modelId}' not found`,
+          type: "invalid_request_error",
+          param: null,
+          code: "model_not_found"
+        }
+      });
+    }
+
+    res.json(model);
+  } catch (error) {
+    console.error('Error in getModel:', error.message);
+    res.status(500).json({
       error: {
-        message: `Model '${modelId}' not found`,
-        type: "invalid_request_error",
+        message: 'Failed to retrieve model',
+        type: "server_error",
         param: null,
-        code: "model_not_found"
+        code: "model_unavailable"
       }
     });
   }
-  
-  res.json(model);
 };
 
 module.exports = {

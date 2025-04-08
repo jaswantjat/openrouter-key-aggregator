@@ -311,19 +311,19 @@ function apiKeyAuth(req, res, next) {
 }
 
 // Explicit route for /models (n8n compatibility)
-app.get('/models', importedApiKeyAuth, (req, res) => {
+app.get('/models', importedApiKeyAuth, async (req, res) => {
   console.log('[DEBUG] Direct /models route hit');
-  modelsController.getModels(req, res);
+  await modelsController.getModels(req, res);
 });
 
 // Explicit route for /v1/models
-app.get('/v1/models', importedApiKeyAuth, (req, res) => {
+app.get('/v1/models', importedApiKeyAuth, async (req, res) => {
   console.log('[DEBUG] Direct /v1/models route hit');
-  modelsController.getModels(req, res);
+  await modelsController.getModels(req, res);
 });
 
 // Explicit route for /v1/models/:model
-app.get('/v1/models/:model*', importedApiKeyAuth, (req, res) => {
+app.get('/v1/models/:model*', importedApiKeyAuth, async (req, res) => {
   // Extract the full model name from the URL
   const fullPath = req.path;
   const modelName = fullPath.replace('/v1/models/', '');
@@ -331,17 +331,17 @@ app.get('/v1/models/:model*', importedApiKeyAuth, (req, res) => {
 
   // Override the params.model with the full model name
   req.params.model = modelName;
-  modelsController.getModel(req, res);
+  await modelsController.getModel(req, res);
 });
 
 // Explicit route for /api/v1/models
-app.get('/api/v1/models', importedApiKeyAuth, (req, res) => {
+app.get('/api/v1/models', importedApiKeyAuth, async (req, res) => {
   console.log('[DEBUG] Direct /api/v1/models route hit');
-  modelsController.getModels(req, res);
+  await modelsController.getModels(req, res);
 });
 
 // Explicit route for /api/v1/models/:model
-app.get('/api/v1/models/:model*', importedApiKeyAuth, (req, res) => {
+app.get('/api/v1/models/:model*', importedApiKeyAuth, async (req, res) => {
   // Extract the full model name from the URL
   const fullPath = req.path;
   const modelName = fullPath.replace('/api/v1/models/', '');
@@ -349,11 +349,11 @@ app.get('/api/v1/models/:model*', importedApiKeyAuth, (req, res) => {
 
   // Override the params.model with the full model name
   req.params.model = modelName;
-  modelsController.getModel(req, res);
+  await modelsController.getModel(req, res);
 });
 
 // Explicit route for /models/:model
-app.get('/models/:model*', importedApiKeyAuth, (req, res) => {
+app.get('/models/:model*', importedApiKeyAuth, async (req, res) => {
   // Extract the full model name from the URL
   const fullPath = req.path;
   const modelName = fullPath.replace('/models/', '');
@@ -361,7 +361,7 @@ app.get('/models/:model*', importedApiKeyAuth, (req, res) => {
 
   // Override the params.model with the full model name
   req.params.model = modelName;
-  modelsController.getModel(req, res);
+  await modelsController.getModel(req, res);
 });
 
 // Proxy function
