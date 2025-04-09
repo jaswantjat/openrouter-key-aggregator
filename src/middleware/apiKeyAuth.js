@@ -38,10 +38,28 @@ const apiKeyAuth = (req, res, next) => {
     console.log(`[DEBUG] Found API key in authorization header: ${apiKey.substring(0, 4)}...`);
   }
 
-  // Check for OpenAI SDK style headers (n8n often uses this)
+  // Check for OpenAI SDK style headers (n8n often uses these)
   if (!apiKey && req.headers['openai-api-key']) {
     apiKey = req.headers['openai-api-key'];
     console.log(`[DEBUG] Found API key in openai-api-key header: ${apiKey.substring(0, 4)}...`);
+  }
+
+  // Check for n8n specific headers
+  if (!apiKey && req.headers['authorization-header']) {
+    // n8n sometimes sends the API key in a custom header called 'authorization-header'
+    const authHeader = req.headers['authorization-header'];
+    if (authHeader.startsWith('Bearer ')) {
+      apiKey = authHeader.substring(7);
+    } else {
+      apiKey = authHeader;
+    }
+    console.log(`[DEBUG] Found API key in authorization-header: ${apiKey.substring(0, 4)}...`);
+  }
+
+  // Check for n8n custom headers
+  if (!apiKey && req.headers['x-authorization']) {
+    apiKey = req.headers['x-authorization'];
+    console.log(`[DEBUG] Found API key in x-authorization header: ${apiKey.substring(0, 4)}...`);
   }
 
   // Check for query parameter

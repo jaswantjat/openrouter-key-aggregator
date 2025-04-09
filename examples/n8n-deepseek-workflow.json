@@ -1,0 +1,98 @@
+{
+  "name": "OpenRouter Key Aggregator - Deepseek Example",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "// Input from previous node or manual input\nconst chatInput = items[0].json.chatInput || \"What is the capital of France?\";\n\n// Format message properly for AI Agent\nreturn [{\n  json: {\n    model: \"deepseek/deepseek-chat-v3-0324:free\",\n    messages: [\n      {\n        role: \"user\",\n        content: chatInput\n      }\n    ]\n  }\n}];"
+      },
+      "id": "f79c9d4f-d4f7-4fbb-8f40-cfbed31cff65",
+      "name": "Format Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2260,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "deepseek/deepseek-chat-v3-0324:free",
+          "mode": "list",
+          "cachedResultName": "deepseek/deepseek-chat-v3-0324:free"
+        },
+        "options": {}
+      },
+      "id": "0414f7d4-f79f-4fbb-8f40-cfbed31cff65",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2460,
+        1280
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "openrouter-key-aggregator",
+          "name": "OpenRouter Key Aggregator"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatInput": "What is the capital of France?"
+      },
+      "id": "e79c9d4f-d4f7-4fbb-8f40-cfbed31cff65",
+      "name": "Manual Input",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        2060,
+        1280
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Input": {
+      "main": [
+        [
+          {
+            "node": "Format Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Message": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Chat Model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "OpenRouter",
+      "color": "#ff9900"
+    },
+    {
+      "name": "AI",
+      "color": "#00ccff"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-04-09T10:00:00.000Z",
+  "versionId": "1"
+}
