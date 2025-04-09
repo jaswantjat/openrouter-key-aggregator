@@ -45,9 +45,31 @@ This guide provides detailed instructions for integrating the OpenRouter Key Agg
 
 ## Using the OpenAI Chat Model Node
 
-### Step 1: Add a Function Node for Message Formatting
+### Step 1: Using the chatInput Format (Simplified Approach)
 
-To prevent the "Cannot read properties of undefined (reading 'content')" error, add a Function node before your OpenAI Chat Model node:
+The OpenRouter Key Aggregator now supports the n8n-specific `chatInput` format directly, which simplifies integration:
+
+1. Add a **Function** node to your workflow
+2. Configure it with the following code:
+
+```javascript
+// Input from previous node
+const chatInput = items[0].json.userInput || "Hi";
+
+// Use the simplified chatInput format
+return [{
+  json: {
+    model: "deepseek/deepseek-chat-v3-0324:free", // Use one of the exact free model IDs
+    chatInput: chatInput // The OpenRouter Key Aggregator will convert this to messages format automatically
+  }
+}];
+```
+
+3. Connect this Function node to your OpenAI Chat Model node
+
+### Step 2: Using the Messages Format (Traditional Approach)
+
+Alternatively, you can use the standard OpenAI messages format:
 
 1. Add a **Function** node to your workflow
 2. Configure it with the following code:
@@ -70,8 +92,6 @@ return [{
   }
 }];
 ```
-
-> **Note**: The `messages` array is critical for compatibility. Do not use `chatInput` directly in your request.
 
 3. Connect this Function node to your OpenAI Chat Model node
 
@@ -103,7 +123,24 @@ If you encounter a "Model not found" error:
 
 This error occurs when the message format is incorrect. To fix it:
 
-#### Solution 1: Fix Input Format
+#### Solution 1: Use the chatInput Format
+
+The OpenRouter Key Aggregator now supports the n8n-specific `chatInput` format directly:
+
+```javascript
+return [{
+  json: {
+    model: "deepseek/deepseek-chat-v3-0324:free",
+    chatInput: "Your message here" // Will be automatically converted to messages format
+  }
+}];
+```
+
+This is the simplest solution and should work in most cases.
+
+#### Solution 2: Fix Input Format
+
+If the chatInput format doesn't work, use the standard messages format:
 
 1. Make sure you're using the Function node as described above to format your messages
 2. Verify that your messages array has the correct structure:
@@ -118,11 +155,9 @@ This error occurs when the message format is incorrect. To fix it:
    }
    ```
 
-3. **IMPORTANT**: Do not use `chatInput` directly in your request. Always convert it to a properly formatted `messages` array using the Function node.
+3. Check that the OpenAI Chat Model node is properly connected to the Function node
 
-4. Check that the OpenAI Chat Model node is properly connected to the Function node
-
-5. If you're still encountering issues, try using the full model ID (e.g., `deepseek/deepseek-chat-v3-0324:free`) instead of a simplified name
+4. If you're still encountering issues, try using the full model ID (e.g., `deepseek/deepseek-chat-v3-0324:free`) instead of a simplified name
 
 #### Solution 2: Add a Response Formatter Function Node
 
