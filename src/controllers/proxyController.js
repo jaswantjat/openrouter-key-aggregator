@@ -183,8 +183,12 @@ const proxyRequest = async (req, res, next) => {
     // Log successful response
     console.log(`Received response from OpenRouter with status: ${response.status}`);
 
-    // Increment key usage
-    keyManager.incrementKeyUsage(apiKey);
+    // Increment key usage with model information
+    keyManager.incrementKeyUsage(apiKey, requestData.model);
+
+    // Add debug headers to response
+    res.setHeader('X-OpenRouter-Key-Aggregator-Model', requestData.model);
+    res.setHeader('X-OpenRouter-Key-Aggregator-Key', apiKey.substring(0, 4) + '...');
 
     // Return the response
     return res.status(response.status).json(response.data);

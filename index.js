@@ -828,9 +828,33 @@ app.get('/api', (req, res) => {
     endpoints: {
       proxy: '/api/proxy',
       status: '/api/status',
-      apiKeys: '/api/keys'
+      apiKeys: '/api/keys',
+      health: '/health'
     }
   });
+});
+
+// Health check endpoint for load balancers
+app.get('/health', (req, res) => {
+  try {
+    // Get key stats
+    const keys = getKeyStatus();
+
+    // Check if we have any keys with remaining capacity
+    const availableKeys = keys.filter(k => !k.disabled && k.dailyRemaining > 5);
+    const healthy = availableKeys.length > 0;
+
+    // Return appropriate status code
+    res.status(healthy ? 200 : 503).json({
+      healthy,
+      availableKeys: availableKeys.length,
+      totalKeys: keys.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(500).json({ healthy: false, error: error.message });
+  }
 });
 
 // Home route - Redirect to admin dashboard
