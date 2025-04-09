@@ -28,17 +28,20 @@ const PAID_MODEL_IDS = [];
 const convertToOpenAIFormat = (openRouterModels) => {
   const openAIModels = [];
 
-  // Add ONLY the exact free models from OpenRouter
-  // This avoids confusion with too many model aliases
+  // Add models in multiple formats to ensure compatibility with different clients
   const addedModelIds = new Set();
 
-  // Add all free models with their exact IDs
+  // Add all free models with their exact IDs and additional formats for better compatibility
   FREE_MODEL_IDS.forEach(modelId => {
-    // Extract provider for the permission
+    // Extract provider and model name
     const parts = modelId.split('/');
     const provider = parts[0];
+    let modelName = parts[1] || modelId;
 
-    // Add the full model ID exactly as it appears in OpenRouter
+    // Remove :free suffix if present
+    const modelNameWithoutSuffix = modelName.split(':')[0];
+
+    // Format 1: Add the full model ID exactly as it appears in OpenRouter
     openAIModels.push({
       id: modelId,
       object: "model",
@@ -61,6 +64,57 @@ const convertToOpenAIFormat = (openRouterModels) => {
       root: modelId,
       parent: null
     });
+
+    // Format 2: Add model name without provider (for n8n compatibility)
+    // This is critical for n8n which often uses just the model name
+    openAIModels.push({
+      id: modelName,
+      object: "model",
+      created: Math.floor(Date.now() / 1000),
+      owned_by: provider,
+      permission: [{
+        id: `modelperm-${modelName.replace(/\//g, '-').replace(/:/g, '-')}`,
+        object: "model_permission",
+        created: Math.floor(Date.now() / 1000),
+        allow_create_engine: false,
+        allow_sampling: true,
+        allow_logprobs: true,
+        allow_search_indices: false,
+        allow_view: true,
+        allow_fine_tuning: false,
+        organization: "*",
+        group: null,
+        is_blocking: false
+      }],
+      root: modelId, // Point to the full model ID
+      parent: null
+    });
+
+    // Format 3: Add model name without suffix (for n8n compatibility)
+    if (modelNameWithoutSuffix !== modelName) {
+      openAIModels.push({
+        id: modelNameWithoutSuffix,
+        object: "model",
+        created: Math.floor(Date.now() / 1000),
+        owned_by: provider,
+        permission: [{
+          id: `modelperm-${modelNameWithoutSuffix.replace(/\//g, '-').replace(/:/g, '-')}`,
+          object: "model_permission",
+          created: Math.floor(Date.now() / 1000),
+          allow_create_engine: false,
+          allow_sampling: true,
+          allow_logprobs: true,
+          allow_search_indices: false,
+          allow_view: true,
+          allow_fine_tuning: false,
+          organization: "*",
+          group: null,
+          is_blocking: false
+        }],
+        root: modelId, // Point to the full model ID
+        parent: null
+      });
+    }
 
     // Track that we've added this model
     addedModelIds.add(modelId);
