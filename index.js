@@ -496,9 +496,23 @@ async function proxyRequest(req, res) {
       // If we found a match, use the exact model ID
       if (matchedModel) {
         console.log(`[DEBUG] Final matched model: ${matchedModel.id}`);
-        requestData.model = matchedModel.id;
+        // Always use the full model ID (with provider and :free suffix)
+        // This ensures that OpenRouter accepts the model ID
+        if (matchedModel.root && matchedModel.root !== matchedModel.id) {
+          console.log(`[DEBUG] Using root model ID: ${matchedModel.root}`);
+          requestData.model = matchedModel.root;
+        } else {
+          requestData.model = matchedModel.id;
+        }
       } else {
         console.log(`[DEBUG] No match found for model: ${requestData.model}. Using as is.`);
+
+        // Special case for gemini-2.0-flash-exp
+        if (requestData.model === 'gemini-2.0-flash-exp' ||
+            requestData.model === 'gemini-2.0-flash-exp:free') {
+          console.log(`[DEBUG] Special case for gemini-2.0-flash-exp, using google/gemini-2.0-flash-exp:free`);
+          requestData.model = 'google/gemini-2.0-flash-exp:free';
+        }
       }
     }
 
