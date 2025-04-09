@@ -316,15 +316,33 @@ app.get('/models', importedApiKeyAuth, async (req, res) => {
   await modelsController.getModels(req, res);
 });
 
-// Special route for when base URL includes /v1/chat/completions
+// Special routes for when base URL includes /v1/chat/completions
 app.get('/v1/chat/completions/v1/models', importedApiKeyAuth, async (req, res) => {
   console.log('[DEBUG] Special route /v1/chat/completions/v1/models hit');
+  await modelsController.getModels(req, res);
+});
+
+// Special route for when base URL includes just /chat/completions
+app.get('/chat/completions/v1/models', importedApiKeyAuth, async (req, res) => {
+  console.log('[DEBUG] Special route /chat/completions/v1/models hit');
   await modelsController.getModels(req, res);
 });
 
 // Special route for when base URL includes /api/v1/chat/completions
 app.get('/api/v1/chat/completions/v1/models', importedApiKeyAuth, async (req, res) => {
   console.log('[DEBUG] Special route /api/v1/chat/completions/v1/models hit');
+  await modelsController.getModels(req, res);
+});
+
+// Special route for when base URL includes just /api/chat/completions
+app.get('/api/chat/completions/v1/models', importedApiKeyAuth, async (req, res) => {
+  console.log('[DEBUG] Special route /api/chat/completions/v1/models hit');
+  await modelsController.getModels(req, res);
+});
+
+// Special route for when base URL includes just /completions
+app.get('/completions/v1/models', importedApiKeyAuth, async (req, res) => {
+  console.log('[DEBUG] Special route /completions/v1/models hit');
   await modelsController.getModels(req, res);
 });
 
@@ -677,6 +695,36 @@ app.post('/api/v1/chat/completions/v1/chat/completions', importedApiKeyAuth, (re
   console.log('[DEBUG] Special route /api/v1/chat/completions/v1/chat/completions hit');
   // Modify the path to remove the duplicate
   req.path = '/api/v1/chat/completions';
+  proxyRequest(req, res);
+});
+
+// Additional special routes for chat completions
+app.post('/chat/completions/v1/chat/completions', importedApiKeyAuth, (req, res) => {
+  console.log('[DEBUG] Special route /chat/completions/v1/chat/completions hit');
+  // Modify the path to remove the duplicate
+  req.path = '/v1/chat/completions';
+  proxyRequest(req, res);
+});
+
+app.post('/api/chat/completions/v1/chat/completions', importedApiKeyAuth, (req, res) => {
+  console.log('[DEBUG] Special route /api/chat/completions/v1/chat/completions hit');
+  // Modify the path to remove the duplicate
+  req.path = '/api/v1/chat/completions';
+  proxyRequest(req, res);
+});
+
+app.post('/completions/v1/chat/completions', importedApiKeyAuth, (req, res) => {
+  console.log('[DEBUG] Special route /completions/v1/chat/completions hit');
+  // Modify the path to remove the duplicate
+  req.path = '/v1/chat/completions';
+  proxyRequest(req, res);
+});
+
+// Special routes for when the base URL is the full path
+app.post('/https://openrouter-key-aggregator.onrender.com/v1/chat/completions', importedApiKeyAuth, (req, res) => {
+  console.log('[DEBUG] Special route with full URL in path hit');
+  // Modify the path to the correct endpoint
+  req.path = '/v1/chat/completions';
   proxyRequest(req, res);
 });
 

@@ -67,9 +67,9 @@ const convertToOpenAIFormat = (openRouterModels) => {
           parent: null
         });
 
-        // Also add an alias entry with just the model name (without provider or :free suffix)
-        // This helps n8n find the model when it uses simplified names
+        // Add multiple aliases to help n8n find the model with different name formats
         if (modelNameWithoutSuffix !== model.id) {
+          // Alias 1: Just the model name without provider or :free suffix
           openAIModels.push({
             id: modelNameWithoutSuffix,
             object: "model",
@@ -92,6 +92,65 @@ const convertToOpenAIFormat = (openRouterModels) => {
             root: model.id, // Point to the full model ID
             parent: null
           });
+
+          // Alias 2: Provider/model without :free suffix
+          const providerModelWithoutSuffix = `${provider}/${modelNameWithoutSuffix}`;
+          if (providerModelWithoutSuffix !== model.id) {
+            openAIModels.push({
+              id: providerModelWithoutSuffix,
+              object: "model",
+              created: model.created || Math.floor(Date.now() / 1000),
+              owned_by: provider,
+              permission: [{
+                id: `modelperm-${providerModelWithoutSuffix.replace(/\//g, '-').replace(/:/g, '-')}`,
+                object: "model_permission",
+                created: model.created || Math.floor(Date.now() / 1000),
+                allow_create_engine: false,
+                allow_sampling: true,
+                allow_logprobs: true,
+                allow_search_indices: false,
+                allow_view: true,
+                allow_fine_tuning: false,
+                organization: "*",
+                group: null,
+                is_blocking: false
+              }],
+              root: model.id, // Point to the full model ID
+              parent: null
+            });
+          }
+
+          // Alias 3: For models like gemini-2.0-flash-exp, add gemini-flash as an alias
+          if (modelNameWithoutSuffix.includes('-')) {
+            const simplifiedName = modelNameWithoutSuffix.split('-').filter(part =>
+              !part.match(/^\d/) && part !== 'exp' && part.length > 2
+            ).join('-');
+
+            if (simplifiedName && simplifiedName !== modelNameWithoutSuffix) {
+              openAIModels.push({
+                id: simplifiedName,
+                object: "model",
+                created: model.created || Math.floor(Date.now() / 1000),
+                owned_by: provider,
+                permission: [{
+                  id: `modelperm-${simplifiedName.replace(/\//g, '-').replace(/:/g, '-')}`,
+                  object: "model_permission",
+                  created: model.created || Math.floor(Date.now() / 1000),
+                  allow_create_engine: false,
+                  allow_sampling: true,
+                  allow_logprobs: true,
+                  allow_search_indices: false,
+                  allow_view: true,
+                  allow_fine_tuning: false,
+                  organization: "*",
+                  group: null,
+                  is_blocking: false
+                }],
+                root: model.id, // Point to the full model ID
+                parent: null
+              });
+            }
+          }
         }
       }
     });
