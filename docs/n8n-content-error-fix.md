@@ -10,9 +10,23 @@ This error occurs when n8n's AI Agent node tries to access the `content` propert
 2. The message object in the choices array is missing or undefined
 3. The content property within the message object is missing or undefined
 
-## Solution 1: Use the Function Node to Format Input
+## Solution 1: Use the chatInput Format (Recommended)
 
-The most reliable way to prevent this error is to use a Function node before your OpenAI Chat Model node to ensure your input is properly formatted:
+The OpenRouter Key Aggregator now fully supports the n8n-specific `chatInput` format, which is the simplest and most reliable solution:
+
+```javascript
+// Function node before OpenAI Chat Model node
+return [{
+  json: {
+    model: "deepseek/deepseek-chat-v3-0324:free", // Use one of the exact free model IDs
+    chatInput: "Your message here" // Will be automatically converted to messages format
+  }
+}];
+```
+
+## Solution 2: Use the Standard Messages Format
+
+Alternatively, you can use the standard OpenAI messages format:
 
 ```javascript
 // Input from previous node or manual input
@@ -33,9 +47,9 @@ return [{
 }];
 ```
 
-## Solution 2: Add a Response Formatter Function Node
+## Solution 3: Add a Response Formatter Function Node
 
-If Solution 1 doesn't work, add a second Function node AFTER the OpenAI Chat Model node to ensure the response is properly formatted:
+If Solutions 1 and 2 don't work, add a Function node AFTER the OpenAI Chat Model node to ensure the response is properly formatted:
 
 ```javascript
 // Input from the OpenAI Chat Model node
@@ -71,7 +85,7 @@ if (!input.choices || !Array.isArray(input.choices) || input.choices.length === 
       index: choice.index || index,
       finish_reason: choice.finish_reason || 'stop'
     };
-    
+
     // Ensure message exists and has content
     if (!choice.message) {
       formattedChoice.message = {
@@ -84,7 +98,7 @@ if (!input.choices || !Array.isArray(input.choices) || input.choices.length === 
         content: choice.message.content || 'No content available.'
       };
     }
-    
+
     return formattedChoice;
   });
 }

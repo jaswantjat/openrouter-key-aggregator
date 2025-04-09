@@ -48,9 +48,11 @@ const proxyRequest = async (req, res, next) => {
 
     // Special handling for n8n's chatInput format
     // This is a pre-processing step before any other validation
-    if (requestData.chatInput !== undefined && (!requestData.messages || !Array.isArray(requestData.messages) || requestData.messages.length === 0)) {
+    if (requestData.chatInput !== undefined) {
       console.log(`[DEBUG] Detected n8n chatInput format at the beginning of request processing: ${requestData.chatInput}`);
       try {
+        // Always create messages array from chatInput, regardless of whether messages already exists
+        // This ensures chatInput always takes precedence, which is what n8n users expect
         requestData.messages = [
           {
             role: 'user',
@@ -60,6 +62,14 @@ const proxyRequest = async (req, res, next) => {
         console.log(`[DEBUG] Pre-processed chatInput into messages: ${JSON.stringify(requestData.messages)}`);
       } catch (error) {
         console.log(`[DEBUG] Error pre-processing chatInput: ${error.message}`);
+        // Create a default messages array in case of error
+        requestData.messages = [
+          {
+            role: 'user',
+            content: 'Hello'
+          }
+        ];
+        console.log(`[DEBUG] Created default messages array after error: ${JSON.stringify(requestData.messages)}`);
       }
     }
 
