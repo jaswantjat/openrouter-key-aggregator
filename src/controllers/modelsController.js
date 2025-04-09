@@ -10,6 +10,7 @@ let modelsCacheExpiry = 0;
 const CACHE_TTL = 3600000; // 1 hour in milliseconds
 
 // List of free models we want to ensure are always available
+// These are the models that are confirmed to be working
 const FREE_MODEL_IDS = [
   "meta-llama/llama-4-maverick:free",
   "meta-llama/llama-4-scout:free",
@@ -19,9 +20,11 @@ const FREE_MODEL_IDS = [
 ];
 
 // List of paid models we want to ensure are always available
+// Only include models that are confirmed to be working
 const PAID_MODEL_IDS = [
-  "anthropic/claude-3-opus",
-  "openai/gpt-4o"
+  // Uncomment models as needed
+  // "anthropic/claude-3-opus",
+  // "openai/gpt-4o"
 ];
 
 /**
@@ -30,11 +33,160 @@ const PAID_MODEL_IDS = [
 const convertToOpenAIFormat = (openRouterModels) => {
   const openAIModels = [];
 
+  // Add our known free models even if they're not returned by OpenRouter
+  // This ensures n8n always has access to these models
+  const addedModelIds = new Set();
+
+  // Add all free models first
+  FREE_MODEL_IDS.forEach(modelId => {
+    // Extract provider and model name
+    const parts = modelId.split('/');
+    const provider = parts[0];
+    let modelName = parts[1] || modelId;
+
+    // Remove :free suffix if present
+    const modelNameWithoutSuffix = modelName.split(':')[0];
+
+    // Add the full model ID
+    openAIModels.push({
+      id: modelId,
+      object: "model",
+      created: Math.floor(Date.now() / 1000),
+      owned_by: provider,
+      permission: [{
+        id: `modelperm-${modelId.replace(/\//g, '-').replace(/:/g, '-')}`,
+        object: "model_permission",
+        created: Math.floor(Date.now() / 1000),
+        allow_create_engine: false,
+        allow_sampling: true,
+        allow_logprobs: true,
+        allow_search_indices: false,
+        allow_view: true,
+        allow_fine_tuning: false,
+        organization: "*",
+        group: null,
+        is_blocking: false
+      }],
+      root: modelId,
+      parent: null
+    });
+
+    // Add simplified aliases
+    openAIModels.push({
+      id: modelNameWithoutSuffix,
+      object: "model",
+      created: Math.floor(Date.now() / 1000),
+      owned_by: provider,
+      permission: [{
+        id: `modelperm-${modelNameWithoutSuffix.replace(/\//g, '-').replace(/:/g, '-')}`,
+        object: "model_permission",
+        created: Math.floor(Date.now() / 1000),
+        allow_create_engine: false,
+        allow_sampling: true,
+        allow_logprobs: true,
+        allow_search_indices: false,
+        allow_view: true,
+        allow_fine_tuning: false,
+        organization: "*",
+        group: null,
+        is_blocking: false
+      }],
+      root: modelId,
+      parent: null
+    });
+
+    // Add even more simplified aliases for n8n compatibility
+    // For example, "llama-4-maverick" -> "maverick"
+    let simpleName = modelNameWithoutSuffix.split('-').pop();
+    if (simpleName && simpleName !== modelNameWithoutSuffix) {
+      openAIModels.push({
+        id: simpleName,
+        object: "model",
+        created: Math.floor(Date.now() / 1000),
+        owned_by: provider,
+        permission: [{
+          id: `modelperm-${simpleName.replace(/\//g, '-').replace(/:/g, '-')}`,
+          object: "model_permission",
+          created: Math.floor(Date.now() / 1000),
+          allow_create_engine: false,
+          allow_sampling: true,
+          allow_logprobs: true,
+          allow_search_indices: false,
+          allow_view: true,
+          allow_fine_tuning: false,
+          organization: "*",
+          group: null,
+          is_blocking: false
+        }],
+        root: modelId,
+        parent: null
+      });
+    }
+
+    // Special handling for gemini models
+    if (modelNameWithoutSuffix.includes('gemini')) {
+      // Add 'gemini-flash' alias for gemini-2.0-flash-exp
+      if (modelNameWithoutSuffix.includes('flash')) {
+        openAIModels.push({
+          id: "gemini-flash",
+          object: "model",
+          created: Math.floor(Date.now() / 1000),
+          owned_by: provider,
+          permission: [{
+            id: `modelperm-gemini-flash`,
+            object: "model_permission",
+            created: Math.floor(Date.now() / 1000),
+            allow_create_engine: false,
+            allow_sampling: true,
+            allow_logprobs: true,
+            allow_search_indices: false,
+            allow_view: true,
+            allow_fine_tuning: false,
+            organization: "*",
+            group: null,
+            is_blocking: false
+          }],
+          root: modelId,
+          parent: null
+        });
+      }
+
+      // Add 'gemini-pro' alias for gemini-2.5-pro-exp
+      if (modelNameWithoutSuffix.includes('pro')) {
+        openAIModels.push({
+          id: "gemini-pro",
+          object: "model",
+          created: Math.floor(Date.now() / 1000),
+          owned_by: provider,
+          permission: [{
+            id: `modelperm-gemini-pro`,
+            object: "model_permission",
+            created: Math.floor(Date.now() / 1000),
+            allow_create_engine: false,
+            allow_sampling: true,
+            allow_logprobs: true,
+            allow_search_indices: false,
+            allow_view: true,
+            allow_fine_tuning: false,
+            organization: "*",
+            group: null,
+            is_blocking: false
+          }],
+          root: modelId,
+          parent: null
+        });
+      }
+    }
+
+    // Track that we've added this model
+    addedModelIds.add(modelId);
+  });
+
   // Process all models from OpenRouter
   if (openRouterModels && openRouterModels.data && Array.isArray(openRouterModels.data)) {
     openRouterModels.data.forEach(model => {
-      // Only include models we're interested in
-      if (FREE_MODEL_IDS.includes(model.id) || PAID_MODEL_IDS.includes(model.id)) {
+      // Only include models we're interested in and haven't already added
+      if ((FREE_MODEL_IDS.includes(model.id) || PAID_MODEL_IDS.includes(model.id)) && !addedModelIds.has(model.id)) {
         // Extract provider and model name
         const parts = model.id.split('/');
         const provider = parts[0];

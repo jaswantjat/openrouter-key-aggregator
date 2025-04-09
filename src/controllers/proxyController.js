@@ -49,15 +49,16 @@ const proxyRequest = async (req, res, next) => {
     if (requestData.model) {
       console.log(`[DEBUG] Processing model name: ${requestData.model}`);
 
-      // Define all supported models
+      // Define all supported models - only include the working free models
       const supportedModels = [
         "meta-llama/llama-4-maverick:free",
         "meta-llama/llama-4-scout:free",
         "google/gemini-2.5-pro-exp-03-25:free",
         "deepseek/deepseek-chat-v3-0324:free",
-        "google/gemini-2.0-flash-exp:free",
-        "anthropic/claude-3-opus",
-        "openai/gpt-4o"
+        "google/gemini-2.0-flash-exp:free"
+        // Uncomment paid models as needed
+        // "anthropic/claude-3-opus",
+        // "openai/gpt-4o"
       ];
 
       // Create a mapping of simplified names to full model names
@@ -127,6 +128,11 @@ const proxyRequest = async (req, res, next) => {
               modelMappings['claude-opus'] = fullModelName;
               modelMappings['opus'] = fullModelName;
             }
+          }
+
+          // For deepseek models
+          if (modelNameWithoutSuffix.includes('deepseek')) {
+            modelMappings['deepseek'] = fullModelName;
           }
         }
       });
