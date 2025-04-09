@@ -433,6 +433,9 @@ async function proxyRequest(req, res) {
     // Log the request for debugging
     console.log(`Proxying request to: ${process.env.OPENROUTER_API_URL}${endpoint}`);
     console.log(`Request model: ${req.body.model || 'Not specified'}`);
+    console.log(`Full request body: ${JSON.stringify(req.body)}`);
+    console.log(`Request headers: ${JSON.stringify(req.headers)}`);
+    console.log(`Request query params: ${JSON.stringify(req.query)}`);
 
     // Make a copy of the request body to modify if needed
     const requestData = { ...req.body };
@@ -527,6 +530,46 @@ async function proxyRequest(req, res) {
           matchedModel = { id: 'google/gemini-2.0-flash-exp:free' };
           console.log(`[DEBUG] Special case for gemini-2.0-flash-exp matched to: ${matchedModel.id}`);
         }
+
+        // Special case for n8n format (model name with provider prefix)
+        if (!matchedModel && requestData.model) {
+          // n8n sometimes uses format like 'openai/gpt-4' or 'anthropic/claude-3-opus'
+          const modelParts = requestData.model.split('/');
+          if (modelParts.length === 2) {
+            const provider = modelParts[0];
+            const modelName = modelParts[1];
+
+            // Try to find a model with the same model name (ignoring provider)
+            const possibleMatches = models.filter(m => {
+              const mParts = m.id.split('/');
+              return mParts.length === 2 && mParts[1].split(':')[0] === modelName;
+            });
+
+            if (possibleMatches.length > 0) {
+              // Prefer free models
+              matchedModel = possibleMatches.find(m => m.id.includes(':free')) || possibleMatches[0];
+              console.log(`[DEBUG] n8n format special case matched ${requestData.model} to: ${matchedModel.id}`);
+            }
+          } else {
+            // n8n might also use just the model name without provider (e.g., 'gpt-4' or 'claude-3-opus')
+            // Try to find any model that contains this model name
+            const modelName = requestData.model;
+            const possibleMatches = models.filter(m => {
+              const mParts = m.id.split('/');
+              if (mParts.length === 2) {
+                const mModelName = mParts[1].split(':')[0];
+                return mModelName === modelName || mModelName.includes(modelName) || modelName.includes(mModelName);
+              }
+              return false;
+            });
+
+            if (possibleMatches.length > 0) {
+              // Prefer free models
+              matchedModel = possibleMatches.find(m => m.id.includes(':free')) || possibleMatches[0];
+              console.log(`[DEBUG] n8n simple format special case matched ${requestData.model} to: ${matchedModel.id}`);
+            }
+          }
+        }
       }
 
       // If we found a match, use the exact model ID
@@ -550,6 +593,11 @@ async function proxyRequest(req, res) {
           requestData.model = 'google/gemini-2.0-flash-exp:free';
         }
       }
+    } else {
+      // If no model is specified, use a default model
+      console.log(`[DEBUG] No model specified in request. Using default model.`);
+      requestData.model = 'meta-llama/llama-4-scout:free';
+      console.log(`[DEBUG] Using default model: ${requestData.model}`);
     }
 
     // Forward the request to OpenRouter with the modified request body
