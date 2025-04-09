@@ -194,17 +194,30 @@ const proxyRequest = async (req, res, next) => {
     // Log the response structure for debugging
     console.log(`[DEBUG] Response structure: ${JSON.stringify(response.data).substring(0, 200)}...`);
 
+    // Special handling for OpenRouter error responses
+    if (response.data && response.data.error && !response.data.choices) {
+      console.log(`[DEBUG] Detected OpenRouter error response: ${JSON.stringify(response.data.error)}`);
+      // Convert OpenRouter error format to a format compatible with n8n
+      response.data = createErrorResponse({
+        message: response.data.error.message || 'Unknown error',
+        status: response.data.error.code || 500,
+        type: 'openrouter_error'
+      });
+    }
     // Ensure the response has the expected structure for n8n
     // n8n expects a specific format for chat completions
-    if (endpoint === '/chat/completions') {
+    else if (endpoint === '/chat/completions') {
       // Use our response formatter to ensure a valid response structure
       response.data = ensureValidChatCompletionResponse(response.data);
+    }
 
-      // Add debug information
+    // Add debug information
+    if (response.data) {
       response.data._debug = {
         timestamp: new Date().toISOString(),
         endpoint: endpoint,
-        requestedModel: requestData.model
+        requestedModel: requestData.model,
+        formatter: 'applied'
       };
     }
 
@@ -228,14 +241,29 @@ const proxyRequest = async (req, res, next) => {
       console.error(`Recorded rate limit error for API key: ${apiKey.substring(0, 4)}...`);
     }
 
-    // Extract the error message
-    const errorMessage = error.response?.data?.error?.message || error.message || 'Unknown error';
+    // Extract the error message with special handling for OpenRouter errors
+    let errorMessage = error.message || 'Unknown error';
+    let errorType = 'server_error';
+    let errorStatus = error.response?.status || 500;
+
+    // Special handling for OpenRouter error format
+    if (error.response?.data?.error) {
+      const openRouterError = error.response.data.error;
+      errorMessage = openRouterError.message || errorMessage;
+      errorType = openRouterError.type || 'openrouter_error';
+      errorStatus = openRouterError.code || errorStatus;
+
+      // Add metadata if available
+      if (openRouterError.metadata) {
+        errorMessage += ` (${JSON.stringify(openRouterError.metadata)})`;
+      }
+    }
 
     // Use our formatter to create a response that's compatible with n8n
     const errorResponse = createErrorResponse({
       message: errorMessage,
-      status: error.response?.status || 500,
-      type: error.response?.data?.error?.type || 'server_error'
+      status: errorStatus,
+      type: errorType
     });
 
     // Add detailed debug information
