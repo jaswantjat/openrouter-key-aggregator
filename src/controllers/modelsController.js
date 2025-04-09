@@ -274,11 +274,14 @@ const getModel = async (req, res) => {
       console.log(`[DEBUG] Model '${modelId}' not found. Available models: ${models.map(m => m.id).join(', ')}`);
       return res.status(404).json({
         error: {
-          message: `Model '${modelId}' not found`,
+          message: `The model '${modelId}' does not exist or you don't have access to it`,
           type: "invalid_request_error",
-          param: null,
+          param: "model",
           code: "model_not_found"
-        }
+        },
+        object: "error",
+        status: 404,
+        lc_error_code: "MODEL_NOT_FOUND"
       });
     }
 

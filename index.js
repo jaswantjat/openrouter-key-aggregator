@@ -9,6 +9,7 @@ const path = require('path');
 // Import controllers and middleware
 const modelsController = require('./src/controllers/modelsController');
 const { apiKeyAuth: importedApiKeyAuth } = require('./src/middleware/apiKeyAuth');
+const { modelValidator } = require('./src/middleware/modelValidator');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -680,10 +681,23 @@ app.post('/api/proxy/chat/completions', importedApiKeyAuth, proxyRequest);
 app.post('/api/proxy/completions', importedApiKeyAuth, proxyRequest);
 app.post('/api/proxy/embeddings', importedApiKeyAuth, proxyRequest);
 
-// OpenAI SDK compatible routes
-app.post('/api/v1/chat/completions', importedApiKeyAuth, proxyRequest);
+// OpenAI SDK compatible routes with /api prefix (for n8n integration)
+app.post('/api/v1/chat/completions', importedApiKeyAuth, modelValidator, (req, res) => {
+  console.log('[DEBUG] n8n integration route /api/v1/chat/completions hit');
+  proxyRequest(req, res);
+});
 app.post('/api/v1/completions', importedApiKeyAuth, proxyRequest);
 app.post('/api/v1/embeddings', importedApiKeyAuth, proxyRequest);
+
+// Special model routes with /api prefix (for n8n integration)
+app.get('/api/v1/models', importedApiKeyAuth, async (req, res) => {
+  console.log('[DEBUG] n8n integration route /api/v1/models hit');
+  await modelsController.getModels(req, res);
+});
+app.get('/api/v1/models/:model', importedApiKeyAuth, async (req, res) => {
+  console.log(`[DEBUG] n8n integration route /api/v1/models/${req.params.model} hit`);
+  await modelsController.getModel(req, res);
+});
 
 // These routes are defined again below with more detailed logging for n8n integration
 // app.post('/v1/chat/completions', importedApiKeyAuth, proxyRequest);
@@ -699,7 +713,7 @@ app.post('/v1/chat/completions/v1/chat/completions', importedApiKeyAuth, (req, r
 });
 
 // Special route for n8n integration when base URL is /v1/chat/completions
-app.post('/v1/chat/completions', importedApiKeyAuth, (req, res) => {
+app.post('/v1/chat/completions', importedApiKeyAuth, modelValidator, (req, res) => {
   console.log('[DEBUG] Direct /v1/chat/completions route hit for n8n integration');
   proxyRequest(req, res);
 });
