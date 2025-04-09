@@ -220,41 +220,15 @@ const proxyRequest = async (req, res, next) => {
 
       // Validate and format messages array for n8n compatibility
       if (!requestData.messages || !Array.isArray(requestData.messages) || requestData.messages.length === 0) {
-        // If chatInput was provided but messages is still missing, something went wrong with the conversion
-        if (requestData.chatInput !== undefined) {
-          console.log(`[DEBUG] chatInput was provided but messages array is still invalid`);
-          // Try one more time to convert chatInput to messages
-          try {
-            // Create a valid messages array from chatInput
-            requestData.messages = [
-              {
-                role: 'user',
-                content: String(requestData.chatInput || 'Hello')
-              }
-            ];
-            console.log(`[DEBUG] Final conversion successful: ${JSON.stringify(requestData.messages)}`);
-          } catch (conversionError) {
-            console.log(`[DEBUG] Final conversion failed: ${conversionError.message}`);
-            // Instead of returning an error, create a default messages array
-            requestData.messages = [
-              {
-                role: 'user',
-                content: 'Hello'
-              }
-            ];
-            console.log(`[DEBUG] Created default messages array after conversion failure: ${JSON.stringify(requestData.messages)}`);
+        // Create a default messages array if none exists
+        console.log(`[DEBUG] No valid messages array, creating default`);
+        requestData.messages = [
+          {
+            role: 'user',
+            content: requestData.chatInput || 'Hello'
           }
-        } else {
-          // No chatInput and no messages, create a default messages array
-          console.log(`[DEBUG] No chatInput and no valid messages array, creating default`);
-          requestData.messages = [
-            {
-              role: 'user',
-              content: 'Hello'
-            }
-          ];
-          console.log(`[DEBUG] Created default messages array: ${JSON.stringify(requestData.messages)}`);
-        }
+        ];
+        console.log(`[DEBUG] Created default messages array: ${JSON.stringify(requestData.messages)}`);
       }
 
       // Final validation to ensure we have a valid messages array
@@ -284,18 +258,7 @@ const proxyRequest = async (req, res, next) => {
         return res.status(400).json(errorResponse);
       }
 
-      // Ensure messages array is not empty
-      if (requestData.messages.length === 0) {
-        console.log(`[DEBUG] Messages array is empty, creating default message`);
-        // Instead of returning an error, create a default message
-        requestData.messages = [
-          {
-            role: 'user',
-            content: requestData.chatInput || 'Hello'
-          }
-        ];
-        console.log(`[DEBUG] Created default message: ${JSON.stringify(requestData.messages)}`);
-      }
+      // This check is now redundant as we've already handled empty messages arrays above
 
       // Ensure each message has role and content
       for (let i = 0; i < requestData.messages.length; i++) {
