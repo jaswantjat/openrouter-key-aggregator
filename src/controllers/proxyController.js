@@ -196,21 +196,94 @@ const proxyRequest = async (req, res, next) => {
     // Ensure the response has the expected structure for n8n
     // n8n expects a specific format for chat completions
     if (endpoint === '/chat/completions') {
-      // Check if the response has the expected structure
-      if (response.data && response.data.choices && response.data.choices.length > 0) {
-        // Ensure each choice has a message with content
-        response.data.choices.forEach(choice => {
-          if (choice.message && choice.message.content === null) {
-            // Replace null content with empty string to avoid n8n errors
+      // Ensure response.data exists
+      if (!response.data) {
+        response.data = {};
+      }
+
+      // Ensure choices array exists
+      if (!response.data.choices || !Array.isArray(response.data.choices)) {
+        response.data.choices = [];
+      }
+
+      // If choices array is empty, add a default choice
+      if (response.data.choices.length === 0) {
+        response.data.choices.push({
+          message: {
+            role: 'assistant',
+            content: 'No response generated.'
+          },
+          finish_reason: 'stop'
+        });
+      }
+
+      // Process each choice to ensure it has the correct structure
+      response.data.choices.forEach((choice, index) => {
+        // Handle different response formats
+        if (choice.delta) {
+          // This is a streaming response
+          if (!choice.delta.content && choice.delta.content !== '') {
+            choice.delta.content = '';
+          }
+        } else if (choice.text) {
+          // This is a completions (non-chat) response
+          // Convert to chat format for n8n
+          choice.message = {
+            role: 'assistant',
+            content: choice.text
+          };
+        } else if (!choice.message) {
+          // No message object at all
+          choice.message = {
+            role: 'assistant',
+            content: ''
+          };
+        } else if (choice.message) {
+          // Message exists but might have null content
+          if (!choice.message.role) {
+            choice.message.role = 'assistant';
+          }
+
+          if (choice.message.content === null || choice.message.content === undefined) {
             choice.message.content = '';
           }
 
-          // Ensure message exists
-          if (!choice.message) {
-            choice.message = { role: 'assistant', content: '' };
+          // Handle array content (some models return content as an array of parts)
+          if (Array.isArray(choice.message.content)) {
+            let textContent = '';
+            choice.message.content.forEach(part => {
+              if (typeof part === 'string') {
+                textContent += part;
+              } else if (part && part.type === 'text' && part.text) {
+                textContent += part.text;
+              }
+            });
+            choice.message.content = textContent;
           }
-        });
+        }
+
+        // Ensure finish_reason exists
+        if (!choice.finish_reason) {
+          choice.finish_reason = 'stop';
+        }
+      });
+
+      // Ensure model field exists
+      if (!response.data.model) {
+        response.data.model = requestData.model || 'unknown';
       }
+
+      // Ensure id field exists
+      if (!response.data.id) {
+        response.data.id = `gen-${Date.now()}`;
+      }
+
+      // Add debug information
+      response.data._debug = {
+        timestamp: new Date().toISOString(),
+        endpoint: endpoint,
+        requestedModel: requestData.model
+      };
     }
 
     // Return the modified response
@@ -233,52 +306,62 @@ const proxyRequest = async (req, res, next) => {
       console.error(`Recorded rate limit error for API key: ${apiKey.substring(0, 4)}...`);
     }
 
-    // Create a more detailed error response
+    // Create a more detailed error response that's fully compatible with n8n
     let errorResponse;
 
-    // Check if this is an OpenRouter error response
-    if (error.response?.data?.error) {
-      // Use the OpenRouter error structure but ensure it's compatible with n8n
-      errorResponse = {
-        error: {
-          message: error.response.data.error.message || error.message,
-          type: error.response.data.error.type || "server_error",
-          param: error.response.data.error.param || null,
-          code: error.response.data.error.code || "unknown_error"
-        },
-        status: error.response?.status || 500,
-        // Add a dummy choices array with a message to prevent n8n from crashing
-        choices: [{
-          message: {
-            role: "assistant",
-            content: `Error: ${error.response.data.error.message || error.message}`
-          },
-          finish_reason: "error"
-        }]
-      };
-    } else {
-      // Create a standard error response
-      errorResponse = {
-        error: {
-          message: error.message,
-          type: "server_error",
-          param: null,
-          code: "unknown_error"
-        },
-        status: error.response?.status || 500,
-        // Add a dummy choices array with a message to prevent n8n from crashing
-        choices: [{
-          message: {
-            role: "assistant",
-            content: `Error: ${error.message}`
-          },
-          finish_reason: "error"
-        }]
-      };
-    }
+    // Extract the error message
+    const errorMessage = error.response?.data?.error?.message || error.message || 'Unknown error';
 
-    // Add timestamp for debugging
-    errorResponse.timestamp = new Date().toISOString();
+    // Create a response that matches the OpenAI API format exactly
+    errorResponse = {
+      // Standard OpenAI API fields
+      id: `error-${Date.now()}`,
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: 'error',
+
+      // This is the critical part for n8n - it expects choices[0].message.content
+      choices: [{
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: `Error: ${errorMessage}`
+        },
+        finish_reason: 'error'
+      }],
+
+      // Include usage to match expected format
+      usage: {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0
+      },
+
+      // Include the error details in a separate field
+      error: {
+        message: errorMessage,
+        type: error.response?.data?.error?.type || 'server_error',
+        param: error.response?.data?.error?.param || null,
+        code: error.response?.data?.error?.code || 'unknown_error'
+      },
+
+      // Include HTTP status
+      status: error.response?.status || 500,
+
+      // Add detailed debug information
+      _debug: {
+        timestamp: new Date().toISOString(),
+        originalError: {
+          message: error.message,
+          stack: error.stack?.split('\n')[0] || 'No stack trace',
+          code: error.code || 'unknown',
+          name: error.name || 'Error'
+        },
+        responseData: error.response?.data ? JSON.stringify(error.response.data).substring(0, 500) : null,
+        requestPath: req.path,
+        requestModel: req.body?.model || 'unknown'
+      }
+    };
 
     // Send the error response directly instead of using the error handler
     return res.status(error.response?.status || 500).json(errorResponse);
