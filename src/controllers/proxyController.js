@@ -49,92 +49,23 @@ const proxyRequest = async (req, res, next) => {
     if (requestData.model) {
       console.log(`[DEBUG] Processing model name: ${requestData.model}`);
 
-      // Define all supported models - only include the working free models
+      // Define all supported models - ONLY the exact free models from OpenRouter
       const supportedModels = [
         "meta-llama/llama-4-maverick:free",
         "meta-llama/llama-4-scout:free",
         "google/gemini-2.5-pro-exp-03-25:free",
         "deepseek/deepseek-chat-v3-0324:free",
         "google/gemini-2.0-flash-exp:free"
-        // Uncomment paid models as needed
-        // "anthropic/claude-3-opus",
-        // "openai/gpt-4o"
       ];
 
-      // Create a mapping of simplified names to full model names
+      // Create a direct mapping using only the exact model IDs
+      // This avoids confusion with too many aliases
       const modelMappings = {};
 
-      // Generate various aliases for each model
+      // Only use the exact model IDs as they appear in OpenRouter
       supportedModels.forEach(fullModelName => {
         // Add the full model name as a key
         modelMappings[fullModelName] = fullModelName;
-
-        // Extract provider and model parts
-        const parts = fullModelName.split('/');
-        const provider = parts[0];
-        let modelName = parts[1] || fullModelName;
-
-        // Remove :free suffix if present
-        const modelNameWithoutSuffix = modelName.split(':')[0];
-
-        // Add model name without provider as a key
-        modelMappings[modelName] = fullModelName;
-
-        // Add model name without provider and without :free suffix as a key
-        modelMappings[modelNameWithoutSuffix] = fullModelName;
-
-        // Add provider/model without :free suffix as a key
-        modelMappings[`${provider}/${modelNameWithoutSuffix}`] = fullModelName;
-
-        // For models like gemini-2.0-flash-exp, add simplified names
-        if (modelNameWithoutSuffix.includes('-')) {
-          const parts = modelNameWithoutSuffix.split('-');
-
-          // Create simplified names by removing version numbers
-          // e.g., gemini-2.0-flash-exp -> gemini-flash
-          const simplifiedName = parts
-            .filter(part => !part.match(/^\d/) && part !== 'exp' && part.length > 2)
-            .join('-');
-
-          if (simplifiedName && simplifiedName !== modelNameWithoutSuffix) {
-            modelMappings[simplifiedName] = fullModelName;
-          }
-
-          // For llama models, add even more simplified names
-          if (modelNameWithoutSuffix.includes('llama')) {
-            if (modelNameWithoutSuffix.includes('scout')) {
-              modelMappings['llama-scout'] = fullModelName;
-              modelMappings['scout'] = fullModelName;
-            } else if (modelNameWithoutSuffix.includes('maverick')) {
-              modelMappings['llama-maverick'] = fullModelName;
-              modelMappings['maverick'] = fullModelName;
-            }
-          }
-
-          // For gemini models
-          if (modelNameWithoutSuffix.includes('gemini')) {
-            if (modelNameWithoutSuffix.includes('flash')) {
-              modelMappings['gemini-flash'] = fullModelName;
-              modelMappings['flash'] = fullModelName;
-            } else if (modelNameWithoutSuffix.includes('pro')) {
-              modelMappings['gemini-pro'] = fullModelName;
-              modelMappings['pro'] = fullModelName;
-            }
-          }
-
-          // For claude models
-          if (modelNameWithoutSuffix.includes('claude')) {
-            if (modelNameWithoutSuffix.includes('opus')) {
-              modelMappings['claude-opus'] = fullModelName;
-              modelMappings['opus'] = fullModelName;
-            }
-          }
-
-          // For deepseek models
-          if (modelNameWithoutSuffix.includes('deepseek')) {
-            modelMappings['deepseek'] = fullModelName;
-          }
-        }
       });
 
       // Log all available model mappings for debugging
@@ -178,18 +109,23 @@ const proxyRequest = async (req, res, next) => {
 
     // Validate and format messages array for n8n compatibility
     if (endpoint === '/chat/completions') {
+      // Log the entire request data for debugging
+      console.log(`[DEBUG] Full request data: ${JSON.stringify(requestData)}`);
+
       // Special handling for n8n LangChain format
       // n8n might send a single string in chatInput instead of a properly formatted messages array
-      if (requestData.chatInput && (!requestData.messages || !Array.isArray(requestData.messages))) {
+      if (requestData.chatInput !== undefined) {
         console.log(`[DEBUG] Detected n8n LangChain format with chatInput: ${requestData.chatInput}`);
         // Convert chatInput to proper messages format
         requestData.messages = [
           {
             role: 'user',
-            content: requestData.chatInput
+            content: String(requestData.chatInput)
           }
         ];
         console.log(`[DEBUG] Converted to messages format: ${JSON.stringify(requestData.messages)}`);
+      } else {
+        console.log(`[DEBUG] No chatInput found in request data`);
       }
 
       // Validate required fields
@@ -220,28 +156,68 @@ const proxyRequest = async (req, res, next) => {
 
       // Validate and format messages array for n8n compatibility
       if (!requestData.messages || !Array.isArray(requestData.messages)) {
-        const errorResponse = {
-          id: `error-${Date.now()}`,
-          object: 'chat.completion',
-          created: Math.floor(Date.now() / 1000),
-          model: requestData.model || 'error',
-          choices: [{
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: 'Error: messages array is required'
+        // If chatInput was provided but messages is still missing, something went wrong with the conversion
+        if (requestData.chatInput !== undefined) {
+          console.log(`[DEBUG] chatInput was provided but messages conversion failed`);
+          // Try one more time to convert chatInput to messages
+          try {
+            requestData.messages = [
+              {
+                role: 'user',
+                content: String(requestData.chatInput || '')
+              }
+            ];
+            console.log(`[DEBUG] Retry conversion successful: ${JSON.stringify(requestData.messages)}`);
+          } catch (conversionError) {
+            console.log(`[DEBUG] Retry conversion failed: ${conversionError.message}`);
+            const errorResponse = {
+              id: `error-${Date.now()}`,
+              object: 'chat.completion',
+              created: Math.floor(Date.now() / 1000),
+              model: requestData.model || 'error',
+              choices: [{
+                index: 0,
+                message: {
+                  role: 'assistant',
+                  content: 'Error: Failed to convert chatInput to messages'
+                },
+                finish_reason: 'error'
+              }],
+              usage: {
+                prompt_tokens: 0,
+                completion_tokens: 0,
+                total_tokens: 0
+              },
+              error: { message: 'Failed to convert chatInput to messages', code: 'conversion_error' }
+            };
+            console.log(`[DEBUG] Returning error response for conversion failure: ${JSON.stringify(errorResponse)}`);
+            return res.status(400).json(errorResponse);
+          }
+        } else {
+          // No chatInput and no messages, return error
+          const errorResponse = {
+            id: `error-${Date.now()}`,
+            object: 'chat.completion',
+            created: Math.floor(Date.now() / 1000),
+            model: requestData.model || 'error',
+            choices: [{
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: 'Error: messages array is required'
+              },
+              finish_reason: 'error'
+            }],
+            usage: {
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              total_tokens: 0
             },
-            finish_reason: 'error'
-          }],
-          usage: {
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 0
-          },
-          error: { message: 'messages array is required', code: 'missing_field' }
-        };
-        console.log(`[DEBUG] Returning error response for missing messages: ${JSON.stringify(errorResponse)}`);
-        return res.status(400).json(errorResponse);
+            error: { message: 'messages array is required', code: 'missing_field' }
+          };
+          console.log(`[DEBUG] Returning error response for missing messages: ${JSON.stringify(errorResponse)}`);
+          return res.status(400).json(errorResponse);
+        }
       }
 
       // Ensure messages array is not empty
