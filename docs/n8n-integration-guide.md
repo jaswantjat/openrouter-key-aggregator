@@ -103,6 +103,8 @@ If you encounter a "Model not found" error:
 
 This error occurs when the message format is incorrect. To fix it:
 
+#### Solution 1: Fix Input Format
+
 1. Make sure you're using the Function node as described above to format your messages
 2. Verify that your messages array has the correct structure:
    ```json
@@ -121,6 +123,77 @@ This error occurs when the message format is incorrect. To fix it:
 4. Check that the OpenAI Chat Model node is properly connected to the Function node
 
 5. If you're still encountering issues, try using the full model ID (e.g., `deepseek/deepseek-chat-v3-0324:free`) instead of a simplified name
+
+#### Solution 2: Add a Response Formatter Function Node
+
+If Solution 1 doesn't work, add a second Function node AFTER the OpenAI Chat Model node to ensure the response is properly formatted:
+
+```javascript
+// Input from the OpenAI Chat Model node
+const input = items[0].json;
+
+// Create a properly formatted response that n8n can process
+let formattedResponse = {
+  id: input.id || `chatcmpl-${Date.now()}`,
+  object: input.object || 'chat.completion',
+  created: input.created || Math.floor(Date.now() / 1000),
+  model: input.model || 'unknown',
+  choices: []
+};
+
+// Handle the case where choices might be missing or malformed
+if (!input.choices || !Array.isArray(input.choices) || input.choices.length === 0) {
+  // Create a default choice with a message and content
+  formattedResponse.choices = [
+    {
+      index: 0,
+      message: {
+        role: 'assistant',
+        content: 'No response generated.'
+      },
+      finish_reason: 'stop'
+    }
+  ];
+} else {
+  // Process each choice to ensure it has a message with content
+  formattedResponse.choices = input.choices.map((choice, index) => {
+    // Create a new choice object with all required fields
+    const formattedChoice = {
+      index: choice.index || index,
+      finish_reason: choice.finish_reason || 'stop'
+    };
+
+    // Ensure message exists and has content
+    if (!choice.message) {
+      formattedChoice.message = {
+        role: 'assistant',
+        content: 'No message content available.'
+      };
+    } else {
+      formattedChoice.message = {
+        role: choice.message.role || 'assistant',
+        content: choice.message.content || 'No content available.'
+      };
+    }
+
+    return formattedChoice;
+  });
+}
+
+// Add usage information if available
+formattedResponse.usage = input.usage || {
+  prompt_tokens: 0,
+  completion_tokens: 0,
+  total_tokens: 0
+};
+
+// Return the formatted response
+return [{
+  json: formattedResponse
+}];
+```
+
+Connect this Function node to your AI Agent node to ensure it always receives a properly formatted response.
 
 ### Authentication Errors
 

@@ -1,0 +1,144 @@
+{
+  "name": "OpenRouter Key Aggregator - Complete Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "chatInput": "What is the capital of France?"
+      },
+      "id": "e79c9d4f-d4f7-4fbb-8f40-cfbed31cff65",
+      "name": "Manual Input",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        2060,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Input from previous node or manual input\nconst chatInput = items[0].json.chatInput || \"What is the capital of France?\";\n\n// Format message properly for AI Agent\nreturn [{\n  json: {\n    model: \"deepseek/deepseek-chat-v3-0324:free\",\n    messages: [\n      {\n        role: \"user\",\n        content: chatInput\n      }\n    ]\n  }\n}];"
+      },
+      "id": "f79c9d4f-d4f7-4fbb-8f40-cfbed31cff65",
+      "name": "Format Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2260,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "deepseek/deepseek-chat-v3-0324:free",
+          "mode": "list",
+          "cachedResultName": "deepseek/deepseek-chat-v3-0324:free"
+        },
+        "options": {}
+      },
+      "id": "0414f7d4-f79f-4fbb-8f40-cfbed31cff65",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2460,
+        1280
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "openrouter-key-aggregator",
+          "name": "OpenRouter Key Aggregator"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Input from the OpenAI Chat Model node\nconst input = items[0].json;\n\n// Create a properly formatted response that n8n can process\nlet formattedResponse = {\n  id: input.id || `chatcmpl-${Date.now()}`,\n  object: input.object || 'chat.completion',\n  created: input.created || Math.floor(Date.now() / 1000),\n  model: input.model || 'unknown',\n  choices: []\n};\n\n// Handle the case where choices might be missing or malformed\nif (!input.choices || !Array.isArray(input.choices) || input.choices.length === 0) {\n  // Create a default choice with a message and content\n  formattedResponse.choices = [\n    {\n      index: 0,\n      message: {\n        role: 'assistant',\n        content: 'No response generated.'\n      },\n      finish_reason: 'stop'\n    }\n  ];\n} else {\n  // Process each choice to ensure it has a message with content\n  formattedResponse.choices = input.choices.map((choice, index) => {\n    // Create a new choice object with all required fields\n    const formattedChoice = {\n      index: choice.index || index,\n      finish_reason: choice.finish_reason || 'stop'\n    };\n    \n    // Ensure message exists and has content\n    if (!choice.message) {\n      formattedChoice.message = {\n        role: 'assistant',\n        content: 'No message content available.'\n      };\n    } else {\n      formattedChoice.message = {\n        role: choice.message.role || 'assistant',\n        content: choice.message.content || 'No content available.'\n      };\n    }\n    \n    return formattedChoice;\n  });\n}\n\n// Add usage information if available\nformattedResponse.usage = input.usage || {\n  prompt_tokens: 0,\n  completion_tokens: 0,\n  total_tokens: 0\n};\n\n// Return the formatted response\nreturn [{\n  json: formattedResponse\n}];"
+      },
+      "id": "a79c9d4f-d4f7-4fbb-8f40-cfbed31cff65",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2660,
+        1280
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b79c9d4f-d4f7-4fbb-8f40-cfbed31cff65",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1,
+      "position": [
+        2860,
+        1280
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Input": {
+      "main": [
+        [
+          {
+            "node": "Format Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Input": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Chat Model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "OpenRouter",
+      "color": "#ff9900"
+    },
+    {
+      "name": "AI",
+      "color": "#00ccff"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-04-09T10:00:00.000Z",
+  "versionId": "1"
+}
