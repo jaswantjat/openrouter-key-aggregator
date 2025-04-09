@@ -57,6 +57,7 @@ To prevent the "Cannot read properties of undefined (reading 'content')" error, 
 const chatInput = items[0].json.chatInput || "Hi";
 
 // Format message properly for AI Agent
+// IMPORTANT: Use this exact format to ensure compatibility
 return [{
   json: {
     model: "deepseek/deepseek-chat-v3-0324:free", // Use one of the exact free model IDs
@@ -69,6 +70,8 @@ return [{
   }
 }];
 ```
+
+> **Note**: The `messages` array is critical for compatibility. Do not use `chatInput` directly in your request.
 
 3. Connect this Function node to your OpenAI Chat Model node
 
@@ -113,7 +116,11 @@ This error occurs when the message format is incorrect. To fix it:
    }
    ```
 
-3. Check that the OpenAI Chat Model node is properly connected to the Function node
+3. **IMPORTANT**: Do not use `chatInput` directly in your request. Always convert it to a properly formatted `messages` array using the Function node.
+
+4. Check that the OpenAI Chat Model node is properly connected to the Function node
+
+5. If you're still encountering issues, try using the full model ID (e.g., `deepseek/deepseek-chat-v3-0324:free`) instead of a simplified name
 
 ### Authentication Errors
 
