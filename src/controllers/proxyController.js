@@ -178,9 +178,23 @@ const proxyRequest = async (req, res, next) => {
 
     // Validate and format messages array for n8n compatibility
     if (endpoint === '/chat/completions') {
+      // Special handling for n8n LangChain format
+      // n8n might send a single string in chatInput instead of a properly formatted messages array
+      if (requestData.chatInput && (!requestData.messages || !Array.isArray(requestData.messages))) {
+        console.log(`[DEBUG] Detected n8n LangChain format with chatInput: ${requestData.chatInput}`);
+        // Convert chatInput to proper messages format
+        requestData.messages = [
+          {
+            role: 'user',
+            content: requestData.chatInput
+          }
+        ];
+        console.log(`[DEBUG] Converted to messages format: ${JSON.stringify(requestData.messages)}`);
+      }
+
       // Validate required fields
       if (!requestData.model) {
-        return res.status(400).json({
+        const errorResponse = {
           id: `error-${Date.now()}`,
           object: 'chat.completion',
           created: Math.floor(Date.now() / 1000),
@@ -199,12 +213,14 @@ const proxyRequest = async (req, res, next) => {
             total_tokens: 0
           },
           error: { message: 'model is required', code: 'missing_field' }
-        });
+        };
+        console.log(`[DEBUG] Returning error response for missing model: ${JSON.stringify(errorResponse)}`);
+        return res.status(400).json(errorResponse);
       }
 
       // Validate and format messages array for n8n compatibility
       if (!requestData.messages || !Array.isArray(requestData.messages)) {
-        return res.status(400).json({
+        const errorResponse = {
           id: `error-${Date.now()}`,
           object: 'chat.completion',
           created: Math.floor(Date.now() / 1000),
@@ -223,12 +239,14 @@ const proxyRequest = async (req, res, next) => {
             total_tokens: 0
           },
           error: { message: 'messages array is required', code: 'missing_field' }
-        });
+        };
+        console.log(`[DEBUG] Returning error response for missing messages: ${JSON.stringify(errorResponse)}`);
+        return res.status(400).json(errorResponse);
       }
 
       // Ensure messages array is not empty
       if (requestData.messages.length === 0) {
-        return res.status(400).json({
+        const errorResponse = {
           id: `error-${Date.now()}`,
           object: 'chat.completion',
           created: Math.floor(Date.now() / 1000),
@@ -247,7 +265,9 @@ const proxyRequest = async (req, res, next) => {
             total_tokens: 0
           },
           error: { message: 'messages array cannot be empty', code: 'invalid_request' }
-        });
+        };
+        console.log(`[DEBUG] Returning error response for empty messages: ${JSON.stringify(errorResponse)}`);
+        return res.status(400).json(errorResponse);
       }
 
       // Ensure each message has role and content
@@ -256,16 +276,19 @@ const proxyRequest = async (req, res, next) => {
 
         // If message is missing role, set default to 'user'
         if (!message.role) {
+          console.log(`[DEBUG] Adding missing role to message at index ${i}`);
           message.role = 'user';
         }
 
         // If message is missing content, set to empty string
         if (message.content === undefined || message.content === null) {
+          console.log(`[DEBUG] Adding missing content to message at index ${i}`);
           message.content = '';
         }
 
         // Convert content to string if it's not already
         if (typeof message.content !== 'string') {
+          console.log(`[DEBUG] Converting non-string content to string for message at index ${i}: ${typeof message.content}`);
           // If it's an array (multimodal content), extract text parts
           if (Array.isArray(message.content)) {
             let textContent = '';
@@ -283,6 +306,8 @@ const proxyRequest = async (req, res, next) => {
           }
         }
       }
+
+      console.log(`[DEBUG] Final formatted messages: ${JSON.stringify(requestData.messages)}`);
     }
 
     // Forward the request to OpenRouter with the modified request body
@@ -335,12 +360,14 @@ const proxyRequest = async (req, res, next) => {
         },
         error: response.data.error
       };
+      console.log(`[DEBUG] Converted error response: ${JSON.stringify(response.data).substring(0, 200)}...`);
     }
     // Ensure the response has the expected structure for n8n
     // n8n expects a specific format for chat completions
     else if (endpoint === '/chat/completions') {
       // If there's no data or no choices, create a default response
       if (!response.data || !response.data.choices || !Array.isArray(response.data.choices) || response.data.choices.length === 0) {
+        console.log(`[DEBUG] No valid choices in response, creating default response`);
         response.data = {
           id: `chatcmpl-${Date.now()}`,
           object: 'chat.completion',
@@ -363,10 +390,12 @@ const proxyRequest = async (req, res, next) => {
           }
         };
       } else {
+        console.log(`[DEBUG] Processing ${response.data.choices.length} choices in response`);
         // Ensure each choice has a valid message with content
-        response.data.choices.forEach(choice => {
+        response.data.choices.forEach((choice, idx) => {
           // If choice has no message, create one
           if (!choice.message) {
+            console.log(`[DEBUG] Choice ${idx} missing message, creating default message`);
             choice.message = {
               role: 'assistant',
               content: ''
@@ -375,11 +404,13 @@ const proxyRequest = async (req, res, next) => {
 
           // If message has null/undefined content, set to empty string
           if (choice.message.content === null || choice.message.content === undefined) {
+            console.log(`[DEBUG] Choice ${idx} has null/undefined content, setting to empty string`);
             choice.message.content = '';
           }
 
           // Handle array content (some models return content as an array)
           if (Array.isArray(choice.message.content)) {
+            console.log(`[DEBUG] Choice ${idx} has array content, converting to string`);
             let textContent = '';
             choice.message.content.forEach(part => {
               if (typeof part === 'string') {
@@ -390,8 +421,37 @@ const proxyRequest = async (req, res, next) => {
             });
             choice.message.content = textContent;
           }
+
+          // Ensure content is a string (n8n LangChain requirement)
+          if (typeof choice.message.content !== 'string') {
+            console.log(`[DEBUG] Choice ${idx} content is not a string (${typeof choice.message.content}), converting to string`);
+            choice.message.content = String(choice.message.content);
+          }
         });
+
+        // Ensure other required fields exist for n8n compatibility
+        if (!response.data.id) {
+          response.data.id = `chatcmpl-${Date.now()}`;
+        }
+
+        if (!response.data.object) {
+          response.data.object = 'chat.completion';
+        }
+
+        if (!response.data.created) {
+          response.data.created = Math.floor(Date.now() / 1000);
+        }
+
+        if (!response.data.usage) {
+          response.data.usage = {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0
+          };
+        }
       }
+
+      console.log(`[DEBUG] Final formatted response: ${JSON.stringify(response.data).substring(0, 200)}...`);
     }
 
     // Add debug information
@@ -442,7 +502,7 @@ const proxyRequest = async (req, res, next) => {
       }
     }
 
-    // Create a response that's compatible with n8n's AI Agent node
+    // Create a response that's compatible with n8n's AI Agent node and LangChain
     // The critical part is ensuring choices[0].message.content exists
     const errorResponse = {
       id: `error-${Date.now()}`,
@@ -470,6 +530,8 @@ const proxyRequest = async (req, res, next) => {
         code: errorStatus
       }
     };
+
+    console.log(`[DEBUG] Created error response for n8n: ${JSON.stringify(errorResponse).substring(0, 200)}...`);
 
     // Add detailed debug information
     errorResponse._debug = {
