@@ -176,6 +176,115 @@ const proxyRequest = async (req, res, next) => {
       console.log(`[DEBUG] Using default model: ${requestData.model}`);
     }
 
+    // Validate and format messages array for n8n compatibility
+    if (endpoint === '/chat/completions') {
+      // Validate required fields
+      if (!requestData.model) {
+        return res.status(400).json({
+          id: `error-${Date.now()}`,
+          object: 'chat.completion',
+          created: Math.floor(Date.now() / 1000),
+          model: 'error',
+          choices: [{
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Error: model is required'
+            },
+            finish_reason: 'error'
+          }],
+          usage: {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0
+          },
+          error: { message: 'model is required', code: 'missing_field' }
+        });
+      }
+
+      // Validate and format messages array for n8n compatibility
+      if (!requestData.messages || !Array.isArray(requestData.messages)) {
+        return res.status(400).json({
+          id: `error-${Date.now()}`,
+          object: 'chat.completion',
+          created: Math.floor(Date.now() / 1000),
+          model: requestData.model || 'error',
+          choices: [{
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Error: messages array is required'
+            },
+            finish_reason: 'error'
+          }],
+          usage: {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0
+          },
+          error: { message: 'messages array is required', code: 'missing_field' }
+        });
+      }
+
+      // Ensure messages array is not empty
+      if (requestData.messages.length === 0) {
+        return res.status(400).json({
+          id: `error-${Date.now()}`,
+          object: 'chat.completion',
+          created: Math.floor(Date.now() / 1000),
+          model: requestData.model || 'error',
+          choices: [{
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Error: messages array cannot be empty'
+            },
+            finish_reason: 'error'
+          }],
+          usage: {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0
+          },
+          error: { message: 'messages array cannot be empty', code: 'invalid_request' }
+        });
+      }
+
+      // Ensure each message has role and content
+      for (let i = 0; i < requestData.messages.length; i++) {
+        const message = requestData.messages[i];
+
+        // If message is missing role, set default to 'user'
+        if (!message.role) {
+          message.role = 'user';
+        }
+
+        // If message is missing content, set to empty string
+        if (message.content === undefined || message.content === null) {
+          message.content = '';
+        }
+
+        // Convert content to string if it's not already
+        if (typeof message.content !== 'string') {
+          // If it's an array (multimodal content), extract text parts
+          if (Array.isArray(message.content)) {
+            let textContent = '';
+            message.content.forEach(part => {
+              if (typeof part === 'string') {
+                textContent += part;
+              } else if (part && part.type === 'text' && part.text) {
+                textContent += part.text;
+              }
+            });
+            message.content = textContent;
+          } else {
+            // Otherwise convert to string
+            message.content = String(message.content);
+          }
+        }
+      }
+    }
+
     // Forward the request to OpenRouter with the modified request body
     const response = await axios({
       method: req.method,
@@ -204,17 +313,85 @@ const proxyRequest = async (req, res, next) => {
     if (response.data && response.data.error && !response.data.choices) {
       console.log(`[DEBUG] Detected OpenRouter error response: ${JSON.stringify(response.data.error)}`);
       // Convert OpenRouter error format to a format compatible with n8n
-      response.data = createErrorResponse({
-        message: response.data.error.message || 'Unknown error',
-        status: response.data.error.code || 500,
-        type: 'openrouter_error'
-      });
+      response.data = {
+        id: `error-${Date.now()}`,
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: requestData.model || 'error',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: `Error: ${response.data.error.message || 'Unknown error'}`
+            },
+            finish_reason: 'error'
+          }
+        ],
+        usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0
+        },
+        error: response.data.error
+      };
     }
     // Ensure the response has the expected structure for n8n
     // n8n expects a specific format for chat completions
     else if (endpoint === '/chat/completions') {
-      // Use our response formatter to ensure a valid response structure
-      response.data = ensureValidChatCompletionResponse(response.data);
+      // If there's no data or no choices, create a default response
+      if (!response.data || !response.data.choices || !Array.isArray(response.data.choices) || response.data.choices.length === 0) {
+        response.data = {
+          id: `chatcmpl-${Date.now()}`,
+          object: 'chat.completion',
+          created: Math.floor(Date.now() / 1000),
+          model: requestData.model || 'unknown',
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: 'No response generated.'
+              },
+              finish_reason: 'stop'
+            }
+          ],
+          usage: {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0
+          }
+        };
+      } else {
+        // Ensure each choice has a valid message with content
+        response.data.choices.forEach(choice => {
+          // If choice has no message, create one
+          if (!choice.message) {
+            choice.message = {
+              role: 'assistant',
+              content: ''
+            };
+          }
+
+          // If message has null/undefined content, set to empty string
+          if (choice.message.content === null || choice.message.content === undefined) {
+            choice.message.content = '';
+          }
+
+          // Handle array content (some models return content as an array)
+          if (Array.isArray(choice.message.content)) {
+            let textContent = '';
+            choice.message.content.forEach(part => {
+              if (typeof part === 'string') {
+                textContent += part;
+              } else if (part && part.type === 'text' && part.text) {
+                textContent += part.text;
+              }
+            });
+            choice.message.content = textContent;
+          }
+        });
+      }
     }
 
     // Add debug information
@@ -249,15 +426,15 @@ const proxyRequest = async (req, res, next) => {
 
     // Extract the error message with special handling for OpenRouter errors
     let errorMessage = error.message || 'Unknown error';
-    let errorType = 'server_error';
     let errorStatus = error.response?.status || 500;
+    let errorData = null;
 
     // Special handling for OpenRouter error format
     if (error.response?.data?.error) {
       const openRouterError = error.response.data.error;
       errorMessage = openRouterError.message || errorMessage;
-      errorType = openRouterError.type || 'openrouter_error';
       errorStatus = openRouterError.code || errorStatus;
+      errorData = openRouterError;
 
       // Add metadata if available
       if (openRouterError.metadata) {
@@ -265,12 +442,34 @@ const proxyRequest = async (req, res, next) => {
       }
     }
 
-    // Use our formatter to create a response that's compatible with n8n
-    const errorResponse = createErrorResponse({
-      message: errorMessage,
-      status: errorStatus,
-      type: errorType
-    });
+    // Create a response that's compatible with n8n's AI Agent node
+    // The critical part is ensuring choices[0].message.content exists
+    const errorResponse = {
+      id: `error-${Date.now()}`,
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: req.body?.model || 'error',
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: `Error: ${errorMessage}` // This is the critical part for n8n
+          },
+          finish_reason: 'error'
+        }
+      ],
+      usage: {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0
+      },
+      error: errorData || {
+        message: errorMessage,
+        type: 'server_error',
+        code: errorStatus
+      }
+    };
 
     // Add detailed debug information
     errorResponse._debug = {
