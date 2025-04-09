@@ -322,6 +322,12 @@ app.get('/v1/chat/completions/v1/models', importedApiKeyAuth, async (req, res) =
   await modelsController.getModels(req, res);
 });
 
+// Special route for n8n integration when base URL is /v1/chat/completions
+app.get('/v1/models', importedApiKeyAuth, async (req, res) => {
+  console.log('[DEBUG] Direct /v1/models route hit for n8n integration');
+  await modelsController.getModels(req, res);
+});
+
 // Special route for when base URL includes just /chat/completions
 app.get('/chat/completions/v1/models', importedApiKeyAuth, async (req, res) => {
   console.log('[DEBUG] Special route /chat/completions/v1/models hit');
@@ -679,7 +685,8 @@ app.post('/api/v1/chat/completions', importedApiKeyAuth, proxyRequest);
 app.post('/api/v1/completions', importedApiKeyAuth, proxyRequest);
 app.post('/api/v1/embeddings', importedApiKeyAuth, proxyRequest);
 
-app.post('/v1/chat/completions', importedApiKeyAuth, proxyRequest);
+// These routes are defined again below with more detailed logging for n8n integration
+// app.post('/v1/chat/completions', importedApiKeyAuth, proxyRequest);
 app.post('/v1/completions', importedApiKeyAuth, proxyRequest);
 app.post('/v1/embeddings', importedApiKeyAuth, proxyRequest);
 
@@ -688,6 +695,12 @@ app.post('/v1/chat/completions/v1/chat/completions', importedApiKeyAuth, (req, r
   console.log('[DEBUG] Special route /v1/chat/completions/v1/chat/completions hit');
   // Modify the path to remove the duplicate
   req.path = '/v1/chat/completions';
+  proxyRequest(req, res);
+});
+
+// Special route for n8n integration when base URL is /v1/chat/completions
+app.post('/v1/chat/completions', importedApiKeyAuth, (req, res) => {
+  console.log('[DEBUG] Direct /v1/chat/completions route hit for n8n integration');
   proxyRequest(req, res);
 });
 

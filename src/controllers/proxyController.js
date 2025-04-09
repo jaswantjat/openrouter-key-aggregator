@@ -38,16 +38,63 @@ const proxyRequest = async (req, res, next) => {
     // Log the request for debugging
     console.log(`Proxying request to: ${process.env.OPENROUTER_API_URL}${endpoint}`);
     console.log(`Request model: ${req.body.model || 'Not specified'}`);
+    console.log(`Full request body: ${JSON.stringify(req.body)}`);
+    console.log(`Request headers: ${JSON.stringify(req.headers)}`);
 
-    // Forward the request to OpenRouter with the original request body
-    // This preserves the model selection and all other parameters
+    // Make a copy of the request body to modify if needed
+    const requestData = { ...req.body };
+
+    // Ensure model name is properly formatted for OpenRouter
+    if (requestData.model) {
+      console.log(`[DEBUG] Processing model name: ${requestData.model}`);
+
+      // Check if the model is one of our free models but missing the provider prefix
+      const freeModels = [
+        "meta-llama/llama-4-maverick:free",
+        "meta-llama/llama-4-scout:free",
+        "google/gemini-2.5-pro-exp-03-25:free",
+        "deepseek/deepseek-chat-v3-0324:free",
+        "google/gemini-2.0-flash-exp:free"
+      ];
+
+      // Try to match the model name to one of our free models
+      const matchedModel = freeModels.find(model => {
+        // Extract model name without provider
+        const modelNameWithoutProvider = model.split('/')[1];
+        // Extract base model name without :free suffix
+        const baseModelName = modelNameWithoutProvider.split(':')[0];
+
+        return (
+          model === requestData.model || // Exact match
+          modelNameWithoutProvider === requestData.model || // Match without provider
+          baseModelName === requestData.model || // Match without provider and :free
+          model.includes(requestData.model) // Partial match
+        );
+      });
+
+      if (matchedModel) {
+        console.log(`[DEBUG] Matched model ${requestData.model} to ${matchedModel}`);
+        requestData.model = matchedModel;
+      } else {
+        console.log(`[DEBUG] No match found for model: ${requestData.model}. Using as is.`);
+      }
+    } else {
+      // If no model is specified, use a default model
+      console.log(`[DEBUG] No model specified in request. Using default model.`);
+      requestData.model = 'meta-llama/llama-4-scout:free';
+      console.log(`[DEBUG] Using default model: ${requestData.model}`);
+    }
+
+    // Forward the request to OpenRouter with the modified request body
     const response = await axios({
       method: req.method,
       url: `${process.env.OPENROUTER_API_URL}${endpoint}`,
       headers: headers,
-      data: req.body,
+      data: requestData, // Use the modified request data
       timeout: 120000 // 2 minute timeout
     });
+
+    console.log(`[DEBUG] Request sent to OpenRouter with model: ${requestData.model}`);
 
     // Log successful response
     console.log(`Received response from OpenRouter with status: ${response.status}`);
