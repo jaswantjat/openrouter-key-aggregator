@@ -35,11 +35,20 @@ const convertToOpenAIFormat = (openRouterModels) => {
     openRouterModels.data.forEach(model => {
       // Only include models we're interested in
       if (FREE_MODEL_IDS.includes(model.id) || PAID_MODEL_IDS.includes(model.id)) {
+        // Extract provider and model name
+        const parts = model.id.split('/');
+        const provider = parts[0];
+        let modelName = parts[1] || model.id;
+
+        // Remove :free suffix if present
+        const modelNameWithoutSuffix = modelName.split(':')[0];
+
+        // Create the main model entry with the full ID
         openAIModels.push({
           id: model.id,
           object: "model",
           created: model.created || Math.floor(Date.now() / 1000),
-          owned_by: model.id.split('/')[0],
+          owned_by: provider,
           permission: [{
             id: `modelperm-${model.id.replace(/\//g, '-').replace(/:/g, '-')}`,
             object: "model_permission",
@@ -57,10 +66,38 @@ const convertToOpenAIFormat = (openRouterModels) => {
           root: model.id,
           parent: null
         });
+
+        // Also add an alias entry with just the model name (without provider or :free suffix)
+        // This helps n8n find the model when it uses simplified names
+        if (modelNameWithoutSuffix !== model.id) {
+          openAIModels.push({
+            id: modelNameWithoutSuffix,
+            object: "model",
+            created: model.created || Math.floor(Date.now() / 1000),
+            owned_by: provider,
+            permission: [{
+              id: `modelperm-${modelNameWithoutSuffix.replace(/\//g, '-').replace(/:/g, '-')}`,
+              object: "model_permission",
+              created: model.created || Math.floor(Date.now() / 1000),
+              allow_create_engine: false,
+              allow_sampling: true,
+              allow_logprobs: true,
+              allow_search_indices: false,
+              allow_view: true,
+              allow_fine_tuning: false,
+              organization: "*",
+              group: null,
+              is_blocking: false
+            }],
+            root: model.id, // Point to the full model ID
+            parent: null
+          });
+        }
       }
     });
   }
 
+  console.log(`[DEBUG] Converted ${openAIModels.length} models: ${openAIModels.map(m => m.id).join(', ')}`);
   return openAIModels;
 };
 

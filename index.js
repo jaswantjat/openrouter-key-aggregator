@@ -415,16 +415,27 @@ async function proxyRequest(req, res) {
 
       // If not found, try more flexible matching
       if (!matchedModel) {
+        // Try finding a model where the requested model is the root
+        matchedModel = models.find(m => m.root === requestData.model);
+        console.log(`[DEBUG] Root match result: ${matchedModel ? matchedModel.id : 'No match'}`);
+
         // Try without the :free suffix
-        if (requestData.model.includes(':free')) {
+        if (!matchedModel && requestData.model.includes(':free')) {
           const baseModelId = requestData.model.split(':')[0];
           matchedModel = models.find(m => m.id.startsWith(baseModelId));
           console.log(`[DEBUG] Without :free suffix match result: ${matchedModel ? matchedModel.id : 'No match'}`);
         }
         // Try with the :free suffix
-        else {
-          matchedModel = models.find(m => m.id.startsWith(requestData.model + ':'));
-          console.log(`[DEBUG] With :free suffix match result: ${matchedModel ? matchedModel.id : 'No match'}`);
+        else if (!matchedModel) {
+          // First try exact match with :free suffix
+          matchedModel = models.find(m => m.id === `${requestData.model}:free`);
+          console.log(`[DEBUG] Exact match with :free suffix result: ${matchedModel ? matchedModel.id : 'No match'}`);
+
+          // Then try starts with
+          if (!matchedModel) {
+            matchedModel = models.find(m => m.id.startsWith(`${requestData.model}:`));
+            console.log(`[DEBUG] Starts with :free suffix match result: ${matchedModel ? matchedModel.id : 'No match'}`);
+          }
 
           // Also try with just the model name (without provider)
           if (!matchedModel && !requestData.model.includes('/')) {
@@ -468,6 +479,17 @@ async function proxyRequest(req, res) {
           // Find any gemini model
           matchedModel = models.find(m => m.id.toLowerCase().includes('gemini'));
           console.log(`[DEBUG] Gemini special case match result: ${matchedModel ? matchedModel.id : 'No match'}`);
+        }
+
+        // Special case for google/gemini-2.0-flash-exp:free
+        if (!matchedModel &&
+            (requestData.model === 'gemini-2.0-flash-exp' ||
+             requestData.model === 'gemini-2.0-flash-exp:free' ||
+             requestData.model === 'google/gemini-2.0-flash-exp' ||
+             requestData.model === 'google/gemini-2.0-flash-exp:free')) {
+          // Hardcode the model ID
+          matchedModel = { id: 'google/gemini-2.0-flash-exp:free' };
+          console.log(`[DEBUG] Special case for gemini-2.0-flash-exp matched to: ${matchedModel.id}`);
         }
       }
 
