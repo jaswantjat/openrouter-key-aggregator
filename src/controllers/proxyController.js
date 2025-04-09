@@ -46,6 +46,23 @@ const proxyRequest = async (req, res, next) => {
     // Make a copy of the request body to modify if needed
     const requestData = { ...req.body };
 
+    // Special handling for n8n's chatInput format
+    // This is a pre-processing step before any other validation
+    if (requestData.chatInput !== undefined && (!requestData.messages || !Array.isArray(requestData.messages) || requestData.messages.length === 0)) {
+      console.log(`[DEBUG] Detected n8n chatInput format at the beginning of request processing: ${requestData.chatInput}`);
+      try {
+        requestData.messages = [
+          {
+            role: 'user',
+            content: String(requestData.chatInput)
+          }
+        ];
+        console.log(`[DEBUG] Pre-processed chatInput into messages: ${JSON.stringify(requestData.messages)}`);
+      } catch (error) {
+        console.log(`[DEBUG] Error pre-processing chatInput: ${error.message}`);
+      }
+    }
+
     // Ensure model name is properly formatted for OpenRouter
     if (requestData.model) {
       console.log(`[DEBUG] Processing model name: ${requestData.model}`);
@@ -147,13 +164,30 @@ const proxyRequest = async (req, res, next) => {
       if (requestData.chatInput !== undefined) {
         console.log(`[DEBUG] Detected n8n LangChain format with chatInput: ${requestData.chatInput}`);
         // Convert chatInput to proper messages format
-        requestData.messages = [
-          {
-            role: 'user',
-            content: String(requestData.chatInput)
+        try {
+          // If messages array already exists, don't overwrite it
+          if (!requestData.messages || !Array.isArray(requestData.messages) || requestData.messages.length === 0) {
+            requestData.messages = [
+              {
+                role: 'user',
+                content: String(requestData.chatInput)
+              }
+            ];
+            console.log(`[DEBUG] Created messages array from chatInput: ${JSON.stringify(requestData.messages)}`);
+          } else {
+            console.log(`[DEBUG] Messages array already exists, not overwriting: ${JSON.stringify(requestData.messages)}`);
           }
-        ];
-        console.log(`[DEBUG] Converted to messages format: ${JSON.stringify(requestData.messages)}`);
+        } catch (error) {
+          console.log(`[DEBUG] Error converting chatInput to messages: ${error.message}`);
+          // Create a default messages array
+          requestData.messages = [
+            {
+              role: 'user',
+              content: String(requestData.chatInput || 'Hello')
+            }
+          ];
+          console.log(`[DEBUG] Created default messages array: ${JSON.stringify(requestData.messages)}`);
+        }
       } else {
         console.log(`[DEBUG] No chatInput found in request data`);
       }
@@ -185,73 +219,47 @@ const proxyRequest = async (req, res, next) => {
       }
 
       // Validate and format messages array for n8n compatibility
-      if (!requestData.messages || !Array.isArray(requestData.messages)) {
+      if (!requestData.messages || !Array.isArray(requestData.messages) || requestData.messages.length === 0) {
         // If chatInput was provided but messages is still missing, something went wrong with the conversion
         if (requestData.chatInput !== undefined) {
-          console.log(`[DEBUG] chatInput was provided but messages conversion failed`);
+          console.log(`[DEBUG] chatInput was provided but messages array is still invalid`);
           // Try one more time to convert chatInput to messages
           try {
+            // Create a valid messages array from chatInput
             requestData.messages = [
               {
                 role: 'user',
-                content: String(requestData.chatInput || '')
+                content: String(requestData.chatInput || 'Hello')
               }
             ];
-            console.log(`[DEBUG] Retry conversion successful: ${JSON.stringify(requestData.messages)}`);
+            console.log(`[DEBUG] Final conversion successful: ${JSON.stringify(requestData.messages)}`);
           } catch (conversionError) {
-            console.log(`[DEBUG] Retry conversion failed: ${conversionError.message}`);
-            const errorResponse = {
-              id: `error-${Date.now()}`,
-              object: 'chat.completion',
-              created: Math.floor(Date.now() / 1000),
-              model: requestData.model || 'error',
-              choices: [{
-                index: 0,
-                message: {
-                  role: 'assistant',
-                  content: 'Error: Failed to convert chatInput to messages'
-                },
-                finish_reason: 'error'
-              }],
-              usage: {
-                prompt_tokens: 0,
-                completion_tokens: 0,
-                total_tokens: 0
-              },
-              error: { message: 'Failed to convert chatInput to messages', code: 'conversion_error' }
-            };
-            console.log(`[DEBUG] Returning error response for conversion failure: ${JSON.stringify(errorResponse)}`);
-            return res.status(400).json(errorResponse);
+            console.log(`[DEBUG] Final conversion failed: ${conversionError.message}`);
+            // Instead of returning an error, create a default messages array
+            requestData.messages = [
+              {
+                role: 'user',
+                content: 'Hello'
+              }
+            ];
+            console.log(`[DEBUG] Created default messages array after conversion failure: ${JSON.stringify(requestData.messages)}`);
           }
         } else {
-          // No chatInput and no messages, return error
-          const errorResponse = {
-            id: `error-${Date.now()}`,
-            object: 'chat.completion',
-            created: Math.floor(Date.now() / 1000),
-            model: requestData.model || 'error',
-            choices: [{
-              index: 0,
-              message: {
-                role: 'assistant',
-                content: 'Error: messages array is required'
-              },
-              finish_reason: 'error'
-            }],
-            usage: {
-              prompt_tokens: 0,
-              completion_tokens: 0,
-              total_tokens: 0
-            },
-            error: { message: 'messages array is required', code: 'missing_field' }
-          };
-          console.log(`[DEBUG] Returning error response for missing messages: ${JSON.stringify(errorResponse)}`);
-          return res.status(400).json(errorResponse);
+          // No chatInput and no messages, create a default messages array
+          console.log(`[DEBUG] No chatInput and no valid messages array, creating default`);
+          requestData.messages = [
+            {
+              role: 'user',
+              content: 'Hello'
+            }
+          ];
+          console.log(`[DEBUG] Created default messages array: ${JSON.stringify(requestData.messages)}`);
         }
       }
 
-      // Ensure messages array is not empty
-      if (requestData.messages.length === 0) {
+      // Final validation to ensure we have a valid messages array
+      if (!requestData.messages || !Array.isArray(requestData.messages) || requestData.messages.length === 0) {
+        console.log(`[DEBUG] Messages array is still invalid after all attempts, returning error`);
         const errorResponse = {
           id: `error-${Date.now()}`,
           object: 'chat.completion',
@@ -261,7 +269,7 @@ const proxyRequest = async (req, res, next) => {
             index: 0,
             message: {
               role: 'assistant',
-              content: 'Error: messages array cannot be empty'
+              content: 'Error: Failed to create a valid messages array'
             },
             finish_reason: 'error'
           }],
@@ -270,10 +278,23 @@ const proxyRequest = async (req, res, next) => {
             completion_tokens: 0,
             total_tokens: 0
           },
-          error: { message: 'messages array cannot be empty', code: 'invalid_request' }
+          error: { message: 'Failed to create a valid messages array', code: 'validation_error' }
         };
-        console.log(`[DEBUG] Returning error response for empty messages: ${JSON.stringify(errorResponse)}`);
+        console.log(`[DEBUG] Returning error response for invalid messages array: ${JSON.stringify(errorResponse)}`);
         return res.status(400).json(errorResponse);
+      }
+
+      // Ensure messages array is not empty
+      if (requestData.messages.length === 0) {
+        console.log(`[DEBUG] Messages array is empty, creating default message`);
+        // Instead of returning an error, create a default message
+        requestData.messages = [
+          {
+            role: 'user',
+            content: requestData.chatInput || 'Hello'
+          }
+        ];
+        console.log(`[DEBUG] Created default message: ${JSON.stringify(requestData.messages)}`);
       }
 
       // Ensure each message has role and content
@@ -316,12 +337,21 @@ const proxyRequest = async (req, res, next) => {
       console.log(`[DEBUG] Final formatted messages: ${JSON.stringify(requestData.messages)}`);
     }
 
+    // Remove n8n-specific parameters before sending to OpenRouter
+    const openRouterRequestData = { ...requestData };
+
+    // Remove chatInput as it's not supported by OpenRouter
+    if (openRouterRequestData.chatInput !== undefined) {
+      console.log(`[DEBUG] Removing chatInput parameter before sending to OpenRouter`);
+      delete openRouterRequestData.chatInput;
+    }
+
     // Forward the request to OpenRouter with the modified request body
     const response = await axios({
       method: req.method,
       url: `${process.env.OPENROUTER_API_URL}${endpoint}`,
       headers: headers,
-      data: requestData, // Use the modified request data
+      data: openRouterRequestData, // Use the cleaned request data
       timeout: 120000 // 2 minute timeout
     });
 
