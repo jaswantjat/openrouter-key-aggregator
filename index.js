@@ -689,6 +689,14 @@ app.post('/api/v1/chat/completions', importedApiKeyAuth, modelValidator, (req, r
 app.post('/api/v1/completions', importedApiKeyAuth, proxyRequest);
 app.post('/api/v1/embeddings', importedApiKeyAuth, proxyRequest);
 
+// Additional routes without v1 prefix (for n8n with base URL /api)
+app.post('/api/chat/completions', importedApiKeyAuth, modelValidator, (req, res) => {
+  console.log('[DEBUG] n8n integration route /api/chat/completions hit');
+  proxyRequest(req, res);
+});
+app.post('/api/completions', importedApiKeyAuth, proxyRequest);
+app.post('/api/embeddings', importedApiKeyAuth, proxyRequest);
+
 // Special model routes with /api prefix (for n8n integration)
 app.get('/api/v1/models', importedApiKeyAuth, async (req, res) => {
   console.log('[DEBUG] n8n integration route /api/v1/models hit');
@@ -697,6 +705,22 @@ app.get('/api/v1/models', importedApiKeyAuth, async (req, res) => {
 app.get('/api/v1/models/:model', importedApiKeyAuth, async (req, res) => {
   console.log(`[DEBUG] n8n integration route /api/v1/models/${req.params.model} hit`);
   await modelsController.getModel(req, res);
+});
+
+// Additional model routes without v1 prefix (for n8n with base URL /api)
+app.get('/api/models', importedApiKeyAuth, async (req, res) => {
+  console.log('[DEBUG] n8n integration route /api/models hit');
+  await modelsController.getModels(req, res);
+});
+app.get('/api/models/:model', importedApiKeyAuth, async (req, res) => {
+  console.log(`[DEBUG] n8n integration route /api/models/${req.params.model} hit`);
+  await modelsController.getModel(req, res);
+});
+
+// Special route for direct models access (for n8n with base URL /api)
+app.get('/models', importedApiKeyAuth, async (req, res) => {
+  console.log('[DEBUG] Direct /models route hit for n8n integration');
+  await modelsController.getModels(req, res);
 });
 
 // These routes are defined again below with more detailed logging for n8n integration
@@ -843,7 +867,23 @@ app.get('/api', (req, res) => {
       proxy: '/api/proxy',
       status: '/api/status',
       apiKeys: '/api/keys',
-      health: '/health'
+      health: '/health',
+      models: '/api/v1/models',
+      chat: '/api/v1/chat/completions'
+    }
+  });
+});
+
+// Special route for OpenAI client library discovery
+app.get('/api/.well-known/openai.json', (req, res) => {
+  res.json({
+    "type": "openai",
+    "api_version": "v1",
+    "paths": {
+      "/models": "/api/v1/models",
+      "/chat/completions": "/api/v1/chat/completions",
+      "/completions": "/api/v1/completions",
+      "/embeddings": "/api/v1/embeddings"
     }
   });
 });
