@@ -316,6 +316,18 @@ app.get('/models', importedApiKeyAuth, async (req, res) => {
   await modelsController.getModels(req, res);
 });
 
+// Special route for when base URL includes /v1/chat/completions
+app.get('/v1/chat/completions/v1/models', importedApiKeyAuth, async (req, res) => {
+  console.log('[DEBUG] Special route /v1/chat/completions/v1/models hit');
+  await modelsController.getModels(req, res);
+});
+
+// Special route for when base URL includes /api/v1/chat/completions
+app.get('/api/v1/chat/completions/v1/models', importedApiKeyAuth, async (req, res) => {
+  console.log('[DEBUG] Special route /api/v1/chat/completions/v1/models hit');
+  await modelsController.getModels(req, res);
+});
+
 // Explicit route for /v1/models
 app.get('/v1/models', importedApiKeyAuth, async (req, res) => {
   console.log('[DEBUG] Direct /v1/models route hit');
@@ -328,6 +340,30 @@ app.get('/v1/models/:model*', importedApiKeyAuth, async (req, res) => {
   const fullPath = req.path;
   const modelName = fullPath.replace('/v1/models/', '');
   console.log(`[DEBUG] Direct /v1/models/${modelName} route hit`);
+
+  // Override the params.model with the full model name
+  req.params.model = modelName;
+  await modelsController.getModel(req, res);
+});
+
+// Special route for when base URL includes /v1/chat/completions
+app.get('/v1/chat/completions/v1/models/:model*', importedApiKeyAuth, async (req, res) => {
+  // Extract the full model name from the URL
+  const fullPath = req.path;
+  const modelName = fullPath.replace('/v1/chat/completions/v1/models/', '');
+  console.log(`[DEBUG] Special route /v1/chat/completions/v1/models/${modelName} hit`);
+
+  // Override the params.model with the full model name
+  req.params.model = modelName;
+  await modelsController.getModel(req, res);
+});
+
+// Special route for when base URL includes /api/v1/chat/completions
+app.get('/api/v1/chat/completions/v1/models/:model*', importedApiKeyAuth, async (req, res) => {
+  // Extract the full model name from the URL
+  const fullPath = req.path;
+  const modelName = fullPath.replace('/api/v1/chat/completions/v1/models/', '');
+  console.log(`[DEBUG] Special route /api/v1/chat/completions/v1/models/${modelName} hit`);
 
   // Override the params.model with the full model name
   req.params.model = modelName;
@@ -580,6 +616,21 @@ app.post('/api/v1/embeddings', importedApiKeyAuth, proxyRequest);
 app.post('/v1/chat/completions', importedApiKeyAuth, proxyRequest);
 app.post('/v1/completions', importedApiKeyAuth, proxyRequest);
 app.post('/v1/embeddings', importedApiKeyAuth, proxyRequest);
+
+// Special routes for when base URL already includes chat completions path
+app.post('/v1/chat/completions/v1/chat/completions', importedApiKeyAuth, (req, res) => {
+  console.log('[DEBUG] Special route /v1/chat/completions/v1/chat/completions hit');
+  // Modify the path to remove the duplicate
+  req.path = '/v1/chat/completions';
+  proxyRequest(req, res);
+});
+
+app.post('/api/v1/chat/completions/v1/chat/completions', importedApiKeyAuth, (req, res) => {
+  console.log('[DEBUG] Special route /api/v1/chat/completions/v1/chat/completions hit');
+  // Modify the path to remove the duplicate
+  req.path = '/api/v1/chat/completions';
+  proxyRequest(req, res);
+});
 
 // API Key management routes
 app.post('/api/keys', authenticate, (req, res) => {
