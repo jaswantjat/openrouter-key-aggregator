@@ -190,7 +190,30 @@ const proxyRequest = async (req, res, next) => {
     res.setHeader('X-OpenRouter-Key-Aggregator-Model', requestData.model);
     res.setHeader('X-OpenRouter-Key-Aggregator-Key', apiKey.substring(0, 4) + '...');
 
-    // Return the response
+    // Log the response structure for debugging
+    console.log(`[DEBUG] Response structure: ${JSON.stringify(response.data).substring(0, 200)}...`);
+
+    // Ensure the response has the expected structure for n8n
+    // n8n expects a specific format for chat completions
+    if (endpoint === '/chat/completions') {
+      // Check if the response has the expected structure
+      if (response.data && response.data.choices && response.data.choices.length > 0) {
+        // Ensure each choice has a message with content
+        response.data.choices.forEach(choice => {
+          if (choice.message && choice.message.content === null) {
+            // Replace null content with empty string to avoid n8n errors
+            choice.message.content = '';
+          }
+
+          // Ensure message exists
+          if (!choice.message) {
+            choice.message = { role: 'assistant', content: '' };
+          }
+        });
+      }
+    }
+
+    // Return the modified response
     return res.status(response.status).json(response.data);
   } catch (error) {
     // Log detailed error information
@@ -211,13 +234,51 @@ const proxyRequest = async (req, res, next) => {
     }
 
     // Create a more detailed error response
-    const errorResponse = {
-      error: true,
-      message: error.message,
-      status: error.response?.status,
-      details: error.response?.data || {},
-      timestamp: new Date().toISOString()
-    };
+    let errorResponse;
+
+    // Check if this is an OpenRouter error response
+    if (error.response?.data?.error) {
+      // Use the OpenRouter error structure but ensure it's compatible with n8n
+      errorResponse = {
+        error: {
+          message: error.response.data.error.message || error.message,
+          type: error.response.data.error.type || "server_error",
+          param: error.response.data.error.param || null,
+          code: error.response.data.error.code || "unknown_error"
+        },
+        status: error.response?.status || 500,
+        // Add a dummy choices array with a message to prevent n8n from crashing
+        choices: [{
+          message: {
+            role: "assistant",
+            content: `Error: ${error.response.data.error.message || error.message}`
+          },
+          finish_reason: "error"
+        }]
+      };
+    } else {
+      // Create a standard error response
+      errorResponse = {
+        error: {
+          message: error.message,
+          type: "server_error",
+          param: null,
+          code: "unknown_error"
+        },
+        status: error.response?.status || 500,
+        // Add a dummy choices array with a message to prevent n8n from crashing
+        choices: [{
+          message: {
+            role: "assistant",
+            content: `Error: ${error.message}`
+          },
+          finish_reason: "error"
+        }]
+      };
+    }
+
+    // Add timestamp for debugging
+    errorResponse.timestamp = new Date().toISOString();
 
     // Send the error response directly instead of using the error handler
     return res.status(error.response?.status || 500).json(errorResponse);
