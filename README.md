@@ -12,6 +12,7 @@ A service that manages multiple OpenRouter API keys to bypass the 200 requests p
 - Supports API key authentication for clients
 - Optional basic authentication for admin access
 - Compatible with OpenAI SDK (supports both `/api/proxy/...` and `/api/v1/...` endpoints)
+- Robust n8n integration with fixes for common errors
 
 ## Installation
 
@@ -214,21 +215,9 @@ google/gemini-2.0-flash-exp:free
 
 When configuring OpenAI credentials in n8n, you need to use specific settings to ensure compatibility:
 
-#### Method 1: Using the Base URL with /api prefix (Recommended)
+#### Method 1: Using the Base URL without any path (Recommended)
 
-1. **API Key**: Your API key generated from the admin dashboard (e.g., `258d989626459539c44ad77589a0e1f8`)
-2. **Base URL**: `https://your-service.onrender.com/api` (include the `/api` prefix)
-3. **Organization ID**: Leave blank
-4. **Custom Headers**: Add the following custom headers:
-   ```json
-   {
-     "x-api-key": "YOUR_API_KEY_HERE"
-   }
-   ```
-
-#### Method 2: Using the Base URL without /api prefix
-
-1. **API Key**: Your API key generated from the admin dashboard (e.g., `258d989626459539c44ad77589a0e1f8`)
+1. **API Key**: Your API key generated from the admin dashboard (e.g., `51fa83450b6f92dd3606cad17d261d3d`)
 2. **Base URL**: `https://your-service.onrender.com` (without any path)
 3. **Organization ID**: Leave blank
 4. **Custom Headers**: Add the following custom headers:
@@ -238,7 +227,33 @@ When configuring OpenAI credentials in n8n, you need to use specific settings to
    }
    ```
 
-#### Method 3: Using LangChain Configuration
+#### Method 2: Using the Base URL with /api prefix
+
+1. **API Key**: Your API key generated from the admin dashboard (e.g., `51fa83450b6f92dd3606cad17d261d3d`)
+2. **Base URL**: `https://your-service.onrender.com/api` (include the `/api` prefix)
+3. **Organization ID**: Leave blank
+4. **Custom Headers**: Add the following custom headers:
+   ```json
+   {
+     "x-api-key": "YOUR_API_KEY_HERE"
+   }
+   ```
+
+#### Method 3: Using the Base URL with /v1/chat/completions (Not Recommended)
+
+This method is not recommended but will work with our latest update:
+
+1. **API Key**: Your API key generated from the admin dashboard (e.g., `51fa83450b6f92dd3606cad17d261d3d`)
+2. **Base URL**: `https://your-service.onrender.com/v1/chat/completions`
+3. **Organization ID**: Leave blank
+4. **Custom Headers**: Add the following custom headers:
+   ```json
+   {
+     "x-api-key": "YOUR_API_KEY_HERE"
+   }
+   ```
+
+#### Method 4: Using LangChain Configuration
 
 If you're using LangChain directly (not through n8n), you can configure it like this:
 
@@ -249,7 +264,7 @@ const llm = new ChatOpenAI({
   temperature: 0.9,
   streamUsage: false, // Important for compatibility with some proxies
   configuration: {
-    baseURL: "https://your-service.onrender.com/api",
+    baseURL: "https://your-service.onrender.com", // No path needed
     defaultHeaders: {
       "x-api-key": "YOUR_API_KEY_HERE"
     }
@@ -263,7 +278,7 @@ await llm.invoke("Hi there!");
 
 If you're seeing a "models not found" error in n8n, try these solutions:
 
-1. **Use the correct base URL**: Make sure you're using `https://your-service.onrender.com/api` as the base URL (with the `/api` prefix).
+1. **Use the correct base URL**: Make sure you're using `https://your-service.onrender.com` as the base URL (without any path).
 
 2. **Add custom headers**: In your n8n OpenAI credentials, add these custom headers:
    ```json
@@ -272,22 +287,26 @@ If you're seeing a "models not found" error in n8n, try these solutions:
    }
    ```
 
-3. **Check your OpenRouter API key**: Make sure you've added at least one valid OpenRouter API key to your `.env` file. The key should start with `sk-or-v1-`.
+3. **Try simplified model names**: Our service supports both full model IDs and simplified names:
+   - `meta-llama/llama-4-scout:free` or just `llama-4-scout`
+   - `google/gemini-2.0-flash-exp:free` or just `gemini-2.0-flash-exp`
 
-4. **Verify your client API key**: Make sure the API key you're using in n8n is correctly configured and active in your service.
+4. **Check your OpenRouter API key**: Make sure you've added at least one valid OpenRouter API key to your `.env` file. The key should start with `sk-or-v1-`.
 
-5. **Test the endpoints directly**: Use curl to test the endpoints directly:
+5. **Verify your client API key**: Make sure the API key you're using in n8n is correctly configured and active in your service.
+
+6. **Test the endpoints directly**: Use curl to test the endpoints directly:
    ```bash
    # Test the models endpoint
-   curl -X GET https://your-service.onrender.com/api/v1/models \
+   curl -X GET https://your-service.onrender.com/v1/models \
      -H "x-api-key: YOUR_API_KEY_HERE"
 
    # Test the chat completions endpoint
-   curl -X POST https://your-service.onrender.com/api/v1/chat/completions \
+   curl -X POST https://your-service.onrender.com/v1/chat/completions \
      -H "Content-Type: application/json" \
      -H "x-api-key: YOUR_API_KEY_HERE" \
      -d '{
-       "model": "meta-llama/llama-4-scout:free",
+       "model": "llama-4-scout",
        "messages": [
          {
            "role": "user",
@@ -297,9 +316,20 @@ If you're seeing a "models not found" error in n8n, try these solutions:
      }'
    ```
 
-6. **Restart your service**: Sometimes a simple restart of your service can fix the issue.
+7. **Restart your service**: Sometimes a simple restart of your service can fix the issue.
 
-7. **Check n8n logs**: Look at the n8n logs to see what URL it's trying to access and what errors it's encountering.
+8. **Check n8n logs**: Look at the n8n logs to see what URL it's trying to access and what errors it's encountering.
+
+### n8n Integration
+
+The OpenRouter Key Aggregator is fully compatible with n8n's AI nodes. For detailed integration instructions, see the following guides:
+
+- [n8n Integration Guide](docs/n8n-integration-guide.md) - General guide for integrating with n8n
+- [Fixing "Cannot read properties of undefined (reading 'content')" Error](docs/n8n-content-error-fix.md) - Specific guide for fixing the common content error
+
+Example workflows:
+- [Basic n8n Workflow](examples/n8n-deepseek-workflow.json) - Simple workflow for using the OpenRouter Key Aggregator with n8n
+- [Content Error Fix Workflow](examples/n8n-content-error-fix-workflow.json) - Workflow that demonstrates how to fix the content error
 
 #### Basic Authentication (For Admin Access)
 

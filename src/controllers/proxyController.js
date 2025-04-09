@@ -1,6 +1,7 @@
 const axios = require('axios');
 const keyManager = require('../utils/keyManager');
 const { ensureValidChatCompletionResponse, createErrorResponse } = require('../utils/responseFormatter');
+const { formatResponseForN8n, formatErrorResponseForN8n } = require('../utils/n8nResponseFormatter');
 
 /**
  * Proxy requests to OpenRouter API
@@ -58,14 +59,43 @@ const proxyRequest = async (req, res, next) => {
         "google/gemini-2.0-flash-exp:free"
       ];
 
-      // Create a direct mapping using only the exact model IDs
-      // This avoids confusion with too many aliases
+      // Create a comprehensive mapping for all possible model name formats
+      // This ensures compatibility with different clients including n8n
       const modelMappings = {};
 
-      // Only use the exact model IDs as they appear in OpenRouter
+      // Generate mappings for each supported model
       supportedModels.forEach(fullModelName => {
         // Add the full model name as a key
         modelMappings[fullModelName] = fullModelName;
+
+        // Extract provider and model parts
+        const parts = fullModelName.split('/');
+        const provider = parts[0];
+        let modelName = parts[1] || fullModelName;
+
+        // Remove :free suffix if present
+        const modelNameWithoutSuffix = modelName.split(':')[0];
+
+        // Add model name without provider as a key
+        modelMappings[modelName] = fullModelName;
+
+        // Add model name without provider and without :free suffix as a key
+        modelMappings[modelNameWithoutSuffix] = fullModelName;
+
+        // Add provider/model without :free suffix as a key
+        modelMappings[`${provider}/${modelNameWithoutSuffix}`] = fullModelName;
+
+        // Special handling for deepseek models
+        if (fullModelName.includes('deepseek')) {
+          // Add 'deepseek' as a key
+          modelMappings['deepseek'] = fullModelName;
+          // Add 'deepseek-chat' as a key
+          modelMappings['deepseek-chat'] = fullModelName;
+          // Add 'deepseek-chat-v3' as a key
+          modelMappings['deepseek-chat-v3'] = fullModelName;
+          // Add 'deepseek-chat-v3-0324' as a key
+          modelMappings['deepseek-chat-v3-0324'] = fullModelName;
+        }
       });
 
       // Log all available model mappings for debugging
@@ -367,56 +397,17 @@ const proxyRequest = async (req, res, next) => {
         };
       } else {
         console.log(`[DEBUG] Processing ${response.data.choices.length} choices in response`);
-        // Ensure each choice has a valid message with content
-        response.data.choices.forEach((choice, idx) => {
-          // If choice has no message, create one
-          if (!choice.message) {
-            console.log(`[DEBUG] Choice ${idx} missing message, creating default message`);
-            choice.message = {
-              role: 'assistant',
-              content: ''
-            };
-          }
+        // Use the n8n response formatter to ensure the response is compatible with n8n
+        console.log(`[DEBUG] Using n8n response formatter to ensure compatibility`);
+        response.data = formatResponseForN8n(response.data, requestData);
 
-          // If message has null/undefined content, set to empty string
-          if (choice.message.content === null || choice.message.content === undefined) {
-            console.log(`[DEBUG] Choice ${idx} has null/undefined content, setting to empty string`);
-            choice.message.content = '';
-          }
-
-          // Handle array content (some models return content as an array)
-          if (Array.isArray(choice.message.content)) {
-            console.log(`[DEBUG] Choice ${idx} has array content, converting to string`);
-            let textContent = '';
-            choice.message.content.forEach(part => {
-              if (typeof part === 'string') {
-                textContent += part;
-              } else if (part && part.type === 'text' && part.text) {
-                textContent += part.text;
-              }
-            });
-            choice.message.content = textContent;
-          }
-
-          // Ensure content is a string (n8n LangChain requirement)
-          if (typeof choice.message.content !== 'string') {
-            console.log(`[DEBUG] Choice ${idx} content is not a string (${typeof choice.message.content}), converting to string`);
-            choice.message.content = String(choice.message.content);
-          }
-        });
-
-        // Ensure other required fields exist for n8n compatibility
-        if (!response.data.id) {
-          response.data.id = `chatcmpl-${Date.now()}`;
-        }
-
-        if (!response.data.object) {
-          response.data.object = 'chat.completion';
-        }
-
-        if (!response.data.created) {
-          response.data.created = Math.floor(Date.now() / 1000);
-        }
+        // Add debug information
+        response.data._debug = {
+          timestamp: new Date().toISOString(),
+          formatter: 'n8nResponseFormatter',
+          requestPath: req.path,
+          requestModel: requestData.model || 'unknown'
+        };
 
         if (!response.data.usage) {
           response.data.usage = {
@@ -478,36 +469,16 @@ const proxyRequest = async (req, res, next) => {
       }
     }
 
-    // Create a response that's compatible with n8n's AI Agent node and LangChain
-    // The critical part is ensuring choices[0].message.content exists
-    const errorResponse = {
-      id: `error-${Date.now()}`,
-      object: 'chat.completion',
-      created: Math.floor(Date.now() / 1000),
-      model: req.body?.model || 'error',
-      choices: [
-        {
-          index: 0,
-          message: {
-            role: 'assistant',
-            content: `Error: ${errorMessage}` // This is the critical part for n8n
-          },
-          finish_reason: 'error'
-        }
-      ],
-      usage: {
-        prompt_tokens: 0,
-        completion_tokens: 0,
-        total_tokens: 0
-      },
-      error: errorData || {
-        message: errorMessage,
-        type: 'server_error',
-        code: errorStatus
-      }
+    // Use the n8n error response formatter to ensure the response is compatible with n8n
+    const errorObj = {
+      message: errorMessage,
+      code: errorStatus,
+      metadata: errorData
     };
 
-    console.log(`[DEBUG] Created error response for n8n: ${JSON.stringify(errorResponse).substring(0, 200)}...`);
+    const errorResponse = formatErrorResponseForN8n(errorObj, req.body || {});
+
+    console.log(`[DEBUG] Created error response for n8n using formatter: ${JSON.stringify(errorResponse).substring(0, 200)}...`);
 
     // Add detailed debug information
     errorResponse._debug = {
@@ -521,7 +492,7 @@ const proxyRequest = async (req, res, next) => {
       responseData: error.response?.data ? JSON.stringify(error.response.data).substring(0, 500) : null,
       requestPath: req.path,
       requestModel: req.body?.model || 'unknown',
-      formatter: 'applied'
+      formatter: 'n8nResponseFormatter'
     };
 
     // Send the error response directly instead of using the error handler
