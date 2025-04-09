@@ -9,8 +9,8 @@ let modelsCache = null;
 let modelsCacheExpiry = 0;
 const CACHE_TTL = 3600000; // 1 hour in milliseconds
 
-// List of free models we want to ensure are always available
-// These are the models that are confirmed to be working
+// List of free models from OpenRouter
+// ONLY include the exact model IDs as they appear in OpenRouter
 const FREE_MODEL_IDS = [
   "meta-llama/llama-4-maverick:free",
   "meta-llama/llama-4-scout:free",
@@ -19,13 +19,8 @@ const FREE_MODEL_IDS = [
   "google/gemini-2.0-flash-exp:free"
 ];
 
-// List of paid models we want to ensure are always available
-// Only include models that are confirmed to be working
-const PAID_MODEL_IDS = [
-  // Uncomment models as needed
-  // "anthropic/claude-3-opus",
-  // "openai/gpt-4o"
-];
+// We're not using any paid models for now
+const PAID_MODEL_IDS = [];
 
 /**
  * Convert OpenRouter model format to OpenAI format
@@ -33,21 +28,17 @@ const PAID_MODEL_IDS = [
 const convertToOpenAIFormat = (openRouterModels) => {
   const openAIModels = [];
 
-  // Add our known free models even if they're not returned by OpenRouter
-  // This ensures n8n always has access to these models
+  // Add ONLY the exact free models from OpenRouter
+  // This avoids confusion with too many model aliases
   const addedModelIds = new Set();
 
-  // Add all free models first
+  // Add all free models with their exact IDs
   FREE_MODEL_IDS.forEach(modelId => {
-    // Extract provider and model name
+    // Extract provider for the permission
     const parts = modelId.split('/');
     const provider = parts[0];
-    let modelName = parts[1] || modelId;
 
-    // Remove :free suffix if present
-    const modelNameWithoutSuffix = modelName.split(':')[0];
-
-    // Add the full model ID
+    // Add the full model ID exactly as it appears in OpenRouter
     openAIModels.push({
       id: modelId,
       object: "model",
@@ -71,116 +62,11 @@ const convertToOpenAIFormat = (openRouterModels) => {
       parent: null
     });
 
-    // Add simplified aliases
-    openAIModels.push({
-      id: modelNameWithoutSuffix,
-      object: "model",
-      created: Math.floor(Date.now() / 1000),
-      owned_by: provider,
-      permission: [{
-        id: `modelperm-${modelNameWithoutSuffix.replace(/\//g, '-').replace(/:/g, '-')}`,
-        object: "model_permission",
-        created: Math.floor(Date.now() / 1000),
-        allow_create_engine: false,
-        allow_sampling: true,
-        allow_logprobs: true,
-        allow_search_indices: false,
-        allow_view: true,
-        allow_fine_tuning: false,
-        organization: "*",
-        group: null,
-        is_blocking: false
-      }],
-      root: modelId,
-      parent: null
-    });
-
-    // Add even more simplified aliases for n8n compatibility
-    // For example, "llama-4-maverick" -> "maverick"
-    let simpleName = modelNameWithoutSuffix.split('-').pop();
-    if (simpleName && simpleName !== modelNameWithoutSuffix) {
-      openAIModels.push({
-        id: simpleName,
-        object: "model",
-        created: Math.floor(Date.now() / 1000),
-        owned_by: provider,
-        permission: [{
-          id: `modelperm-${simpleName.replace(/\//g, '-').replace(/:/g, '-')}`,
-          object: "model_permission",
-          created: Math.floor(Date.now() / 1000),
-          allow_create_engine: false,
-          allow_sampling: true,
-          allow_logprobs: true,
-          allow_search_indices: false,
-          allow_view: true,
-          allow_fine_tuning: false,
-          organization: "*",
-          group: null,
-          is_blocking: false
-        }],
-        root: modelId,
-        parent: null
-      });
-    }
-
-    // Special handling for gemini models
-    if (modelNameWithoutSuffix.includes('gemini')) {
-      // Add 'gemini-flash' alias for gemini-2.0-flash-exp
-      if (modelNameWithoutSuffix.includes('flash')) {
-        openAIModels.push({
-          id: "gemini-flash",
-          object: "model",
-          created: Math.floor(Date.now() / 1000),
-          owned_by: provider,
-          permission: [{
-            id: `modelperm-gemini-flash`,
-            object: "model_permission",
-            created: Math.floor(Date.now() / 1000),
-            allow_create_engine: false,
-            allow_sampling: true,
-            allow_logprobs: true,
-            allow_search_indices: false,
-            allow_view: true,
-            allow_fine_tuning: false,
-            organization: "*",
-            group: null,
-            is_blocking: false
-          }],
-          root: modelId,
-          parent: null
-        });
-      }
-
-      // Add 'gemini-pro' alias for gemini-2.5-pro-exp
-      if (modelNameWithoutSuffix.includes('pro')) {
-        openAIModels.push({
-          id: "gemini-pro",
-          object: "model",
-          created: Math.floor(Date.now() / 1000),
-          owned_by: provider,
-          permission: [{
-            id: `modelperm-gemini-pro`,
-            object: "model_permission",
-            created: Math.floor(Date.now() / 1000),
-            allow_create_engine: false,
-            allow_sampling: true,
-            allow_logprobs: true,
-            allow_search_indices: false,
-            allow_view: true,
-            allow_fine_tuning: false,
-            organization: "*",
-            group: null,
-            is_blocking: false
-          }],
-          root: modelId,
-          parent: null
-        });
-      }
-    }
-
     // Track that we've added this model
     addedModelIds.add(modelId);
   });
+
+  // No special handling or aliases - only use exact model IDs
 
   // Process all models from OpenRouter
   if (openRouterModels && openRouterModels.data && Array.isArray(openRouterModels.data)) {
@@ -219,91 +105,8 @@ const convertToOpenAIFormat = (openRouterModels) => {
           parent: null
         });
 
-        // Add multiple aliases to help n8n find the model with different name formats
-        if (modelNameWithoutSuffix !== model.id) {
-          // Alias 1: Just the model name without provider or :free suffix
-          openAIModels.push({
-            id: modelNameWithoutSuffix,
-            object: "model",
-            created: model.created || Math.floor(Date.now() / 1000),
-            owned_by: provider,
-            permission: [{
-              id: `modelperm-${modelNameWithoutSuffix.replace(/\//g, '-').replace(/:/g, '-')}`,
-              object: "model_permission",
-              created: model.created || Math.floor(Date.now() / 1000),
-              allow_create_engine: false,
-              allow_sampling: true,
-              allow_logprobs: true,
-              allow_search_indices: false,
-              allow_view: true,
-              allow_fine_tuning: false,
-              organization: "*",
-              group: null,
-              is_blocking: false
-            }],
-            root: model.id, // Point to the full model ID
-            parent: null
-          });
-
-          // Alias 2: Provider/model without :free suffix
-          const providerModelWithoutSuffix = `${provider}/${modelNameWithoutSuffix}`;
-          if (providerModelWithoutSuffix !== model.id) {
-            openAIModels.push({
-              id: providerModelWithoutSuffix,
-              object: "model",
-              created: model.created || Math.floor(Date.now() / 1000),
-              owned_by: provider,
-              permission: [{
-                id: `modelperm-${providerModelWithoutSuffix.replace(/\//g, '-').replace(/:/g, '-')}`,
-                object: "model_permission",
-                created: model.created || Math.floor(Date.now() / 1000),
-                allow_create_engine: false,
-                allow_sampling: true,
-                allow_logprobs: true,
-                allow_search_indices: false,
-                allow_view: true,
-                allow_fine_tuning: false,
-                organization: "*",
-                group: null,
-                is_blocking: false
-              }],
-              root: model.id, // Point to the full model ID
-              parent: null
-            });
-          }
-
-          // Alias 3: For models like gemini-2.0-flash-exp, add gemini-flash as an alias
-          if (modelNameWithoutSuffix.includes('-')) {
-            const simplifiedName = modelNameWithoutSuffix.split('-').filter(part =>
-              !part.match(/^\d/) && part !== 'exp' && part.length > 2
-            ).join('-');
-
-            if (simplifiedName && simplifiedName !== modelNameWithoutSuffix) {
-              openAIModels.push({
-                id: simplifiedName,
-                object: "model",
-                created: model.created || Math.floor(Date.now() / 1000),
-                owned_by: provider,
-                permission: [{
-                  id: `modelperm-${simplifiedName.replace(/\//g, '-').replace(/:/g, '-')}`,
-                  object: "model_permission",
-                  created: model.created || Math.floor(Date.now() / 1000),
-                  allow_create_engine: false,
-                  allow_sampling: true,
-                  allow_logprobs: true,
-                  allow_search_indices: false,
-                  allow_view: true,
-                  allow_fine_tuning: false,
-                  organization: "*",
-                  group: null,
-                  is_blocking: false
-                }],
-                root: model.id, // Point to the full model ID
-                parent: null
-              });
-            }
-          }
-        }
+        // Track that we've added this model
+        addedModelIds.add(model.id);
       }
     });
   }
