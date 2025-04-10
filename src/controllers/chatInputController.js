@@ -80,6 +80,18 @@ const handleChatInput = async (req, res) => {
       messages: messages
     };
 
+    // Handle simplified model names
+    if (requestData.model === 'deepseek') {
+      openRouterRequestData.model = 'deepseek/deepseek-chat-v3-0324:free';
+      console.log(`[DEBUG] Converted simplified model name 'deepseek' to '${openRouterRequestData.model}'`);
+    } else if (requestData.model === 'llama-4-maverick') {
+      openRouterRequestData.model = 'meta-llama/llama-4-maverick:free';
+      console.log(`[DEBUG] Converted simplified model name 'llama-4-maverick' to '${openRouterRequestData.model}'`);
+    } else if (requestData.model === 'llama-4-scout') {
+      openRouterRequestData.model = 'meta-llama/llama-4-scout:free';
+      console.log(`[DEBUG] Converted simplified model name 'llama-4-scout' to '${openRouterRequestData.model}'`);
+    }
+
     // Add any other parameters from the original request
     if (requestData.temperature) openRouterRequestData.temperature = requestData.temperature;
     if (requestData.max_tokens) openRouterRequestData.max_tokens = requestData.max_tokens;
