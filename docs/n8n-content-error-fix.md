@@ -10,9 +10,9 @@ This error occurs when n8n's AI Agent node tries to access the `content` propert
 2. The message object in the choices array is missing or undefined
 3. The content property within the message object is missing or undefined
 
-## Solution 1: Use the chatInput Format (Recommended)
+## Solution 1: Use the Dedicated chatInput Endpoint (Most Reliable)
 
-The OpenRouter Key Aggregator now fully supports the n8n-specific `chatInput` format, which is the simplest and most reliable solution:
+The OpenRouter Key Aggregator now provides a dedicated endpoint specifically for handling the n8n-specific `chatInput` format:
 
 ```javascript
 // Function node before OpenAI Chat Model node
@@ -23,6 +23,18 @@ return [{
   }
 }];
 ```
+
+To use this endpoint, configure your OpenAI credentials in n8n with:
+
+```
+Base URL: https://openrouter-key-aggregator.onrender.com/api/chatinput
+API Key: YOUR_API_KEY_HERE
+Custom Headers: {
+  "X-API-Key": "YOUR_API_KEY_HERE"
+}
+```
+
+This dedicated endpoint is specifically designed to handle the chatInput format and will always return a properly formatted response for n8n.
 
 ## Solution 2: Use the Standard Messages Format
 
@@ -116,9 +128,22 @@ return [{
 }];
 ```
 
-## Complete Workflow Example
+## Complete Workflow Examples
 
-For the most reliable solution, use both Function nodes in your workflow:
+### Example 1: Using the Dedicated chatInput Endpoint (Recommended)
+
+This is the simplest and most reliable solution:
+
+1. **Manual Input Node** → Provides the initial input
+2. **Format Input Function Node** → Formats the input with chatInput format
+3. **OpenAI Chat Model Node** → Makes the request to the dedicated chatInput endpoint
+4. **AI Agent Node** → Processes the response
+
+You can import the [n8n-chatinput-endpoint-workflow.json](../examples/n8n-chatinput-endpoint-workflow.json) example workflow to get started quickly.
+
+### Example 2: Using the Standard Approach with Response Formatting
+
+If you prefer to use the standard approach:
 
 1. **Manual Input Node** → Provides the initial input
 2. **Format Input Function Node** → Formats the input for the OpenAI Chat Model
@@ -126,9 +151,25 @@ For the most reliable solution, use both Function nodes in your workflow:
 4. **Format Response Function Node** → Ensures the response is properly formatted
 5. **AI Agent Node** → Processes the formatted response
 
+You can import the [n8n-content-error-fix-workflow.json](../examples/n8n-content-error-fix-workflow.json) example workflow to get started quickly.
+
 ## Configuration in n8n
 
-Use the following configuration in n8n:
+### Option 1: Dedicated chatInput Endpoint (Recommended)
+
+For the most reliable solution, use the dedicated chatInput endpoint:
+
+```
+Base URL: https://openrouter-key-aggregator.onrender.com/api/chatinput
+API Key: YOUR_API_KEY_HERE
+Custom Headers: {
+  "X-API-Key": "YOUR_API_KEY_HERE"
+}
+```
+
+### Option 2: Standard Configuration
+
+If you prefer to use the standard configuration:
 
 ```
 Base URL: https://openrouter-key-aggregator.onrender.com/api

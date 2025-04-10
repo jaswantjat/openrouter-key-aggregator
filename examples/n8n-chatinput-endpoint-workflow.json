@@ -1,0 +1,120 @@
+{
+  "name": "OpenRouter Key Aggregator - ChatInput Endpoint Example",
+  "nodes": [
+    {
+      "parameters": {
+        "userInput": "What is the capital of France?"
+      },
+      "id": "e79c9d4f-d4f7-4fbb-8f40-cfbed31cff65",
+      "name": "Manual Input",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        2060,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Input from previous node\nconst chatInput = items[0].json.userInput || \"Hi\";\n\n// Use the simplified chatInput format\nreturn [{\n  json: {\n    model: \"deepseek/deepseek-chat-v3-0324:free\", // Use one of the exact free model IDs\n    chatInput: chatInput // The OpenRouter Key Aggregator will convert this to messages format automatically\n  }\n}];"
+      },
+      "id": "f79c9d4f-d4f7-4fbb-8f40-cfbed31cff65",
+      "name": "Format Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2260,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "deepseek/deepseek-chat-v3-0324:free",
+          "mode": "list",
+          "cachedResultName": "deepseek/deepseek-chat-v3-0324:free"
+        },
+        "options": {}
+      },
+      "id": "0414f7d4-f79f-4fbb-8f40-cfbed31cff65",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2460,
+        1280
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "openrouter-key-aggregator-chatinput",
+          "name": "OpenRouter Key Aggregator ChatInput"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "b79c9d4f-d4f7-4fbb-8f40-cfbed31cff65",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1,
+      "position": [
+        2660,
+        1280
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Input": {
+      "main": [
+        [
+          {
+            "node": "Format Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Input": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Chat Model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "OpenRouter",
+      "color": "#ff9900"
+    },
+    {
+      "name": "AI",
+      "color": "#00ccff"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-04-09T10:00:00.000Z",
+  "versionId": "1"
+}
