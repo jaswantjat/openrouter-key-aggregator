@@ -1,0 +1,141 @@
+{
+  "name": "OpenRouter Specific Integration Fix",
+  "nodes": [
+    {
+      "parameters": {
+        "userInput": "What is the capital of France?"
+      },
+      "id": "e79c9d4f-d4f7-4fbb-8f40-cfbed31cff65",
+      "name": "Manual Input",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        2060,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Input from previous node\nconst userInput = items[0].json.userInput || \"Hello\";\n\n// Format for the OpenAI Chat Model\nreturn [{\n  json: {\n    model: \"deepseek/deepseek-chat-v3-0324:free\", // Use one of the supported free models\n    messages: [\n      {\n        role: \"user\",\n        content: userInput\n      }\n    ]\n  }\n}];"
+      },
+      "id": "f79c9d4f-d4f7-4fbb-8f40-cfbed31cff65",
+      "name": "Format Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2260,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "credentialType": "openAiApi",
+        "model": "deepseek/deepseek-chat-v3-0324:free",
+        "options": {}
+      },
+      "id": "g79c9d4f-d4f7-4fbb-8f40-cfbed31cff65",
+      "name": "OpenAI Chat Model",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        2460,
+        1280
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "openrouter-key-aggregator",
+          "name": "OpenRouter Key Aggregator"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/**\n * OpenRouter-Specific Response Formatter for n8n\n * \n * This function node specifically handles the exact response format from OpenRouter API\n * and transforms it into the format expected by n8n's AI Agent node.\n */\n\n// Input from the OpenRouter API call\nconst input = items[0].json;\n\n// Log the input for debugging\nconsole.log(\"OpenRouter response:\", JSON.stringify(input).substring(0, 500));\n\ntry {\n  // Check if we have the expected structure\n  if (!input || !input.response || !input.response.generations || \n      !Array.isArray(input.response.generations) || input.response.generations.length === 0 ||\n      !Array.isArray(input.response.generations[0]) || input.response.generations[0].length === 0) {\n    \n    // If we don't have the expected structure, check if we already have a compatible format\n    if (input.choices && Array.isArray(input.choices) && input.choices.length > 0 && \n        input.choices[0].message && input.choices[0].message.content) {\n      console.log(\"Response already in compatible format\");\n      return items;\n    }\n    \n    throw new Error(\"Invalid OpenRouter response format\");\n  }\n\n  // Extract the text from the first generation\n  const generation = input.response.generations[0][0];\n  const text = generation.text || \"\";\n  const modelName = generation.generationInfo?.model_name || \"unknown\";\n  const finishReason = generation.generationInfo?.finish_reason || \"stop\";\n\n  // Extract token usage\n  const promptTokens = input.tokenUsage?.promptTokens || 0;\n  const completionTokens = input.tokenUsage?.completionTokens || 0;\n  const totalTokens = input.tokenUsage?.totalTokens || 0;\n\n  // Create the properly formatted response for n8n AI Agent\n  const formattedResponse = {\n    id: `chatcmpl-${Date.now()}`,\n    object: \"chat.completion\",\n    created: Math.floor(Date.now() / 1000),\n    model: modelName,\n    choices: [\n      {\n        index: 0,\n        message: {\n          role: \"assistant\",\n          content: text\n        },\n        finish_reason: finishReason\n      }\n    ],\n    usage: {\n      prompt_tokens: promptTokens,\n      completion_tokens: completionTokens,\n      total_tokens: totalTokens\n    }\n  };\n\n  // Log the formatted response for debugging\n  console.log(\"Formatted response for n8n:\", JSON.stringify(formattedResponse).substring(0, 500));\n\n  // Return the formatted response\n  return [{\n    json: formattedResponse\n  }];\n} catch (error) {\n  console.error(\"Error formatting OpenRouter response:\", error.message);\n  \n  // Return a fallback response\n  return [{\n    json: {\n      id: `error-${Date.now()}`,\n      object: \"chat.completion\",\n      created: Math.floor(Date.now() / 1000),\n      model: \"error\",\n      choices: [\n        {\n          index: 0,\n          message: {\n            role: \"assistant\",\n            content: `Error formatting OpenRouter response: ${error.message}`\n          },\n          finish_reason: \"error\"\n        }\n      ],\n      usage: {\n        prompt_tokens: 0,\n        completion_tokens: 0,\n        total_tokens: 0\n      },\n      error: {\n        message: error.message,\n        stack: error.stack\n      }\n    }\n  }];\n}"
+      },
+      "id": "a79c9d4f-d4f7-4fbb-8f40-cfbed31cff65",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2660,
+        1280
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b79c9d4f-d4f7-4fbb-8f40-cfbed31cff65",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1,
+      "position": [
+        2860,
+        1280
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Input": {
+      "main": [
+        [
+          {
+            "node": "Format Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Input": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Chat Model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "OpenRouter",
+      "color": "#ff9900"
+    },
+    {
+      "name": "AI",
+      "color": "#00ccff"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-04-09T10:00:00.000Z",
+  "versionId": "1"
+}
