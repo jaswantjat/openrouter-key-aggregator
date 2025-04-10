@@ -60,6 +60,9 @@ const proxyRequest = async (req, res, next) => {
           }
         ];
         console.log(`[DEBUG] Pre-processed chatInput into messages: ${JSON.stringify(requestData.messages)}`);
+
+        // Add a flag to indicate this is a chatInput request for special handling in the response
+        requestData._isChatInputRequest = true;
       } catch (error) {
         console.log(`[DEBUG] Error pre-processing chatInput: ${error.message}`);
         // Create a default messages array in case of error
@@ -373,7 +376,7 @@ const proxyRequest = async (req, res, next) => {
     }
     // Ensure the response has the expected structure for n8n
     // n8n expects a specific format for chat completions
-    else if (endpoint === '/chat/completions') {
+    else if (endpoint === '/chat/completions' || requestData._isChatInputRequest) {
       // If there's no data or no choices, create a default response
       if (!response.data || !response.data.choices || !Array.isArray(response.data.choices) || response.data.choices.length === 0) {
         console.log(`[DEBUG] No valid choices in response, creating default response`);
@@ -432,6 +435,13 @@ const proxyRequest = async (req, res, next) => {
         requestedModel: requestData.model,
         formatter: 'applied'
       };
+    }
+
+    // Format the response for n8n compatibility if this is a chatInput request
+    if (requestData._isChatInputRequest) {
+      console.log(`[DEBUG] Formatting response for chatInput request`);
+      const formattedResponse = formatResponseForN8n(response.data, requestData);
+      return res.status(response.status).json(formattedResponse);
     }
 
     // Return the modified response
