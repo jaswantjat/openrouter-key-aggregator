@@ -10,6 +10,7 @@ const path = require('path');
 const modelsController = require('./src/controllers/modelsController');
 const { apiKeyAuth: importedApiKeyAuth } = require('./src/middleware/apiKeyAuth');
 const { modelValidator } = require('./src/middleware/modelValidator');
+const { handleChatInput } = require('./src/controllers/chatInputController');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -684,6 +685,11 @@ app.post('/api/proxy/embeddings', importedApiKeyAuth, proxyRequest);
 // OpenAI SDK compatible routes with /api prefix (for n8n integration)
 app.post('/api/v1/chat/completions', importedApiKeyAuth, modelValidator, (req, res) => {
   console.log('[DEBUG] n8n integration route /api/v1/chat/completions hit');
+  // Check if this is a chatInput request
+  if (req.body && req.body.chatInput !== undefined) {
+    console.log('[DEBUG] Detected chatInput format in /api/v1/chat/completions, redirecting to chatInput handler');
+    return handleChatInput(req, res);
+  }
   proxyRequest(req, res);
 });
 app.post('/api/v1/completions', importedApiKeyAuth, proxyRequest);
@@ -692,6 +698,11 @@ app.post('/api/v1/embeddings', importedApiKeyAuth, proxyRequest);
 // Additional routes without v1 prefix (for n8n with base URL /api)
 app.post('/api/chat/completions', importedApiKeyAuth, modelValidator, (req, res) => {
   console.log('[DEBUG] n8n integration route /api/chat/completions hit');
+  // Check if this is a chatInput request
+  if (req.body && req.body.chatInput !== undefined) {
+    console.log('[DEBUG] Detected chatInput format in /api/chat/completions, redirecting to chatInput handler');
+    return handleChatInput(req, res);
+  }
   proxyRequest(req, res);
 });
 app.post('/api/completions', importedApiKeyAuth, proxyRequest);
@@ -739,6 +750,11 @@ app.post('/v1/chat/completions/v1/chat/completions', importedApiKeyAuth, (req, r
 // Special route for n8n integration when base URL is /v1/chat/completions
 app.post('/v1/chat/completions', importedApiKeyAuth, modelValidator, (req, res) => {
   console.log('[DEBUG] Direct /v1/chat/completions route hit for n8n integration');
+  // Check if this is a chatInput request
+  if (req.body && req.body.chatInput !== undefined) {
+    console.log('[DEBUG] Detected chatInput format, redirecting to chatInput handler');
+    return handleChatInput(req, res);
+  }
   proxyRequest(req, res);
 });
 
@@ -858,6 +874,12 @@ app.get('/api/status', authenticate, (req, res) => {
   });
 });
 
+// Dedicated route for chatInput format (for n8n integration)
+app.post('/api/chatinput', importedApiKeyAuth, (req, res) => {
+  console.log('[DEBUG] Dedicated chatInput route hit');
+  handleChatInput(req, res);
+});
+
 // Home route - JSON info
 app.get('/api', (req, res) => {
   res.json({
@@ -869,7 +891,8 @@ app.get('/api', (req, res) => {
       apiKeys: '/api/keys',
       health: '/health',
       models: '/api/v1/models',
-      chat: '/api/v1/chat/completions'
+      chat: '/api/v1/chat/completions',
+      chatInput: '/api/chatinput'
     }
   });
 });
@@ -883,7 +906,8 @@ app.get('/api/.well-known/openai.json', (req, res) => {
       "/models": "/api/v1/models",
       "/chat/completions": "/api/v1/chat/completions",
       "/completions": "/api/v1/completions",
-      "/embeddings": "/api/v1/embeddings"
+      "/embeddings": "/api/v1/embeddings",
+      "/chatinput": "/api/chatinput"
     }
   });
 });
