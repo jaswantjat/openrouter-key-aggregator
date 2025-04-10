@@ -11,12 +11,14 @@ const CACHE_TTL = 3600000; // 1 hour in milliseconds
 
 // List of free models from OpenRouter
 // ONLY include the exact model IDs as they appear in OpenRouter
+// Only include models that are actually working
 const FREE_MODEL_IDS = [
   "meta-llama/llama-4-maverick:free",
   "meta-llama/llama-4-scout:free",
-  "google/gemini-2.5-pro-exp-03-25:free",
-  "deepseek/deepseek-chat-v3-0324:free",
-  "google/gemini-2.0-flash-exp:free"
+  "deepseek/deepseek-chat-v3-0324:free"
+  // The following models are not working currently:
+  // "google/gemini-2.5-pro-exp-03-25:free",
+  // "google/gemini-2.0-flash-exp:free"
 ];
 
 // We're not using any paid models for now

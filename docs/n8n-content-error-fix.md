@@ -144,9 +144,9 @@ Use one of the following exact free model IDs:
 
 - `meta-llama/llama-4-maverick:free`
 - `meta-llama/llama-4-scout:free`
-- `google/gemini-2.5-pro-exp-03-25:free`
 - `deepseek/deepseek-chat-v3-0324:free`
-- `google/gemini-2.0-flash-exp:free`
+
+**Note**: The Google Gemini models are currently not working and have been removed from the list.
 
 ## Additional Troubleshooting
 
