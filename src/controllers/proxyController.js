@@ -145,7 +145,8 @@ const proxyRequest = async (req, res, next) => {
           // Process the chunk to ensure it has the right format for n8n's LangChain integration
           try {
             // Split the chunk into lines
-            const lines = chunkStr.split('\n').filter(line => line.trim() !== '');
+            const lines = chunkStr.split('
+').filter(line => line.trim() !== '');
             
             // Process each line
             let transformedLines = [];
@@ -180,7 +181,7 @@ const proxyRequest = async (req, res, next) => {
                     
                     // Handle delta format (streaming)
                     if (choice.delta) {
-                      // Ensure message exists with content
+                      // Ensure message object exists with content
                       newChoice.message = {
                         role: choice.delta.role || 'assistant',
                         content: choice.delta.content !== undefined ? choice.delta.content : ''
@@ -199,6 +200,10 @@ const proxyRequest = async (req, res, next) => {
                           ...choice.message,
                           content: '' // Ensure content is at least an empty string
                         };
+                      }
+                      // Ensure role exists if message exists
+                      if (!newChoice.message.role) {
+                          newChoice.message.role = 'assistant';
                       }
                     } 
                     // Handle case where neither delta nor message exists
@@ -240,7 +245,10 @@ const proxyRequest = async (req, res, next) => {
             }
             
             // Join the transformed lines and add newlines
-            const transformedChunk = transformedLines.join('\n') + '\n\n';
+            const transformedChunk = transformedLines.join('
+') + '
+
+';
             
             // Push the transformed chunk
             this.push(transformedChunk);
@@ -277,7 +285,11 @@ const proxyRequest = async (req, res, next) => {
               },
               finish_reason: 'error'
             }]
-          })}\n\ndata: [DONE]\n\n`;
+          })}
+
+data: [DONE]
+
+`;
           
           res.write(errorEvent);
         } catch (writeError) {
@@ -355,7 +367,7 @@ const proxyRequest = async (req, res, next) => {
               index: 0,
               message: {
                 role: 'assistant',
-                content: 'No response generated.'
+                content: 'No response generated.' // Kept original default message here for non-error empty case
               },
               finish_reason: 'stop'
             }
@@ -369,23 +381,26 @@ const proxyRequest = async (req, res, next) => {
       } else {
         console.log(`[DEBUG] Processing ${response.data.choices.length} choices in response`);
         
-        // Ensure each choice has a message with content
+        // Ensure each choice has a message with content - MODIFIED BLOCK
         response.data.choices.forEach(choice => {
           if (!choice.message) {
+            // If message object doesn't exist, create it with default role and empty content
             choice.message = {
               role: 'assistant',
-              content: 'No content available'
+              content: '' // Ensure empty string content
             };
-          } else if (choice.message.content === undefined || choice.message.content === null) {
-            // Ensure content is at least an empty string, never undefined or null
-            choice.message.content = '';
-          }
-          
-          // Ensure role is set
-          if (!choice.message.role) {
-            choice.message.role = 'assistant';
+          } else { 
+            // If message object exists, ensure content is not undefined or null
+            if (choice.message.content === undefined || choice.message.content === null) {
+              choice.message.content = ''; // Set to empty string if undefined/null
+            }
+            // Ensure role is set if message exists
+            if (!choice.message.role) {
+              choice.message.role = 'assistant';
+            }
           }
         });
+        // END OF MODIFIED BLOCK
         
         // Use the n8n response formatter to ensure the response is compatible with n8n
         console.log(`[DEBUG] Using n8n response formatter to ensure compatibility`);
@@ -483,7 +498,8 @@ const proxyRequest = async (req, res, next) => {
       timestamp: new Date().toISOString(),
       originalError: {
         message: error.message,
-        stack: error.stack?.split('\n')[0] || 'No stack trace',
+        stack: error.stack?.split('
+')[0] || 'No stack trace',
         code: error.code || 'unknown',
         name: error.name || 'Error'
       },
