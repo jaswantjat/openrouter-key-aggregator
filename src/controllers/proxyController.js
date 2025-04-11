@@ -8,6 +8,7 @@ const axios = require('axios');
 const keyManager = require('../utils/keyManager');
 const { ensureValidChatCompletionResponse, createErrorResponse } = require('../utils/responseFormatter');
 const { formatResponseForN8n, formatErrorResponseForN8n } = require('../utils/n8nResponseFormatter');
+const { Transform } = require('stream');
 
 /**
  * Proxy requests to OpenRouter API with streaming support
@@ -86,7 +87,7 @@ const proxyRequest = async (req, res, next) => {
     const isStreamingRequest = openRouterRequestData.stream === true;
 
     if (isStreamingRequest) {
-      console.log(`[DEBUG] Streaming request detected, using direct pipe`);
+      console.log(`[DEBUG] Streaming request detected, using direct pipe with transformation`);
       
       // For streaming requests, we need to pipe the response directly
       const openRouterUrl = `${process.env.OPENROUTER_API_URL}${endpoint}`;
@@ -112,7 +113,7 @@ const proxyRequest = async (req, res, next) => {
       keyManager.incrementKeyUsage(apiKey, requestData.model);
       
       // Create a transform stream to handle the SSE format properly
-      const { Transform } = require('stream');
+      // This is critical for n8n's LangChain integration which expects a specific format
       const transformStream = new Transform({
         transform(chunk, encoding, callback) {
           // Convert chunk to string
@@ -121,8 +122,78 @@ const proxyRequest = async (req, res, next) => {
           // Log the chunk for debugging
           console.log(`[STREAM] Received chunk: ${chunkStr.substring(0, 100)}...`);
           
-          // Pass through the chunk unchanged
-          this.push(chunk);
+          // Process the chunk to ensure it has the right format for n8n's LangChain integration
+          try {
+            // Split the chunk into lines
+            const lines = chunkStr.split('\n').filter(line => line.trim() !== '');
+            
+            // Process each line
+            let transformedLines = [];
+            
+            for (const line of lines) {
+              // If it's a data line, process it
+              if (line.startsWith('data: ')) {
+                const data = line.substring(6);
+                
+                // If it's the [DONE] marker, pass it through unchanged
+                if (data === '[DONE]') {
+                  transformedLines.push(line);
+                  continue;
+                }
+                
+                try {
+                  // Parse the JSON data
+                  const jsonData = JSON.parse(data);
+                  
+                  // Check if this is a delta format (streaming)
+                  if (jsonData.choices && jsonData.choices.length > 0 && jsonData.choices[0].delta) {
+                    // This is a streaming response with delta format
+                    const choice = jsonData.choices[0];
+                    
+                    // Create a new choice with both delta and message properties
+                    // This ensures compatibility with n8n's LangChain integration
+                    const newChoice = {
+                      ...choice,
+                      message: {
+                        role: choice.delta.role || 'assistant',
+                        content: choice.delta.content || ''
+                      }
+                    };
+                    
+                    // Create a new JSON object with the modified choice
+                    const newJsonData = {
+                      ...jsonData,
+                      choices: [newChoice]
+                    };
+                    
+                    // Add the transformed line
+                    transformedLines.push(`data: ${JSON.stringify(newJsonData)}`);
+                  } else {
+                    // If it's not a delta format, pass it through unchanged
+                    transformedLines.push(line);
+                  }
+                } catch (error) {
+                  // If there's an error parsing the JSON, pass the line through unchanged
+                  console.error(`[ERROR] Failed to parse JSON in streaming response: ${error.message}`);
+                  transformedLines.push(line);
+                }
+              } else {
+                // If it's not a data line, pass it through unchanged
+                transformedLines.push(line);
+              }
+            }
+            
+            // Join the transformed lines and add newlines
+            const transformedChunk = transformedLines.join('\n') + '\n\n';
+            
+            // Push the transformed chunk
+            this.push(transformedChunk);
+          } catch (error) {
+            // If there's an error processing the chunk, pass it through unchanged
+            console.error(`[ERROR] Failed to process streaming chunk: ${error.message}`);
+            this.push(chunk);
+          }
+          
           callback();
         }
       });
