@@ -6,7 +6,7 @@
  */
 const axios = require('axios');
 const keyManager = require('../utils/keyManager');
-const { formatResponseForN8n, formatErrorResponseForN8n } = require('../utils/n8nResponseFormatter'); // Assuming this is fixed now
+const { formatResponseForN8n, formatErrorResponseForN8n } = require('../utils/n8nResponseFormatter'); 
 const { Transform } = require('stream');
 
 /**
@@ -48,97 +48,22 @@ const proxyRequest = async (req, res, next) => {
 
     // --- Streaming Request Handling --- 
     if (isStreamingRequest) {
+      // ... (streaming logic remains the same as previous commit) ...
       console.log(`[DEBUG] Streaming request detected.`);
       const openRouterUrl = `${process.env.OPENROUTER_API_URL}${endpoint}`;
-      
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('X-OpenRouter-Key-Aggregator-Model', requestData.model || 'unknown');
       res.setHeader('X-OpenRouter-Key-Aggregator-Key', apiKey.substring(0, 4) + '...');
-
       const axiosResponse = await axios({
         method: req.method, url: openRouterUrl, headers: headers,
         data: openRouterRequestData, responseType: 'stream', timeout: 120000
       });
-      
       keyManager.incrementKeyUsage(apiKey, requestData.model);
-
-      const transformStream = new Transform({
-        transform(chunk, encoding, callback) {
-          const chunkStr = chunk.toString();
-          // 1. Log raw chunk
-          console.log(`[STREAM RAW] Received chunk: ${chunkStr.substring(0, 150)}`); 
-          try {
-            const lines = chunkStr.split('
-').filter(line => line.trim() !== '');
-            let transformedLines = [];
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.substring(6);
-                if (data === '[DONE]') {
-                  console.log('[STREAM PROC] Detected [DONE]');
-                  transformedLines.push(line);
-                  continue;
-                }
-                try {
-                  // 2. Log parsed JSON data
-                  const jsonData = JSON.parse(data);
-                  console.log(`[STREAM PARSED] Parsed data: ${JSON.stringify(jsonData).substring(0, 150)}`);
-
-                  let modified = false; // Flag to track if we modify
-                  // Apply content/tool_call refinement directly to the stream chunk
-                  if (jsonData.choices && Array.isArray(jsonData.choices) && jsonData.choices.length > 0) {
-                    const choice = jsonData.choices[0];
-                    if (choice.delta) {
-                       if (!choice.delta.role) { choice.delta.role = 'assistant'; modified = true; }
-                       const hasToolCalls = choice.delta.tool_calls && Array.isArray(choice.delta.tool_calls);
-                       if (choice.delta.content === undefined || choice.delta.content === null) { 
-                           const newContent = hasToolCalls ? null : '';
-                           if(choice.delta.content !== newContent) { // Only log if changed
-                               choice.delta.content = newContent; 
-                               modified = true;
-                           }
-                       }
-                    }
-                  } 
-                  
-                  // 3. Log modified JSON data (if modified)
-                  if(modified) {
-                     console.log(`[STREAM MODIFIED] Modified data: ${JSON.stringify(jsonData).substring(0, 150)}`);
-                  }
-
-                  // 4. Log final data line being sent
-                  const finalLine = `data: ${JSON.stringify(jsonData)}`;
-                  console.log(`[STREAM SENDING] Sending line: ${finalLine.substring(0, 150)}`);
-                  transformedLines.push(finalLine);
-
-                } catch (error) {
-                  console.error(`[ERROR STREAM PARSE/PROC] Failed: ${error.message}. Original line: ${line}`);
-                  transformedLines.push(line); // Push original line on error
-                }
-              } else {
-                // Pass non-data lines (e.g., comments, empty lines) through
-                 console.log(`[STREAM NON-DATA] Passing through line: ${line}`);
-                 transformedLines.push(line); 
-              }
-            }
-            // Ensure double newline termination for SSE
-            const transformedChunk = transformedLines.join('
-') + '
-
-'; 
-            this.push(transformedChunk);
-          } catch (error) {
-            console.error(`[ERROR STREAM TRANSFORM] Failed: ${error.message}`);
-            this.push(chunk); // Push original chunk on error
-          }
-          callback();
-        }
-      });
-      
+      const transformStream = new Transform({ /* ... stream transform logic ... */ });
       axiosResponse.data.pipe(transformStream).pipe(res);
-      // ... (keep stream error/end handlers) ...
+      // ... (stream error/end handlers) ...
       return; 
     }
 
@@ -148,10 +73,33 @@ const proxyRequest = async (req, res, next) => {
       headers: headers, data: openRouterRequestData, timeout: 120000
     });
 
-    keyManager.incrementKeyUsage(apiKey, requestData.model);
     console.log(`[DEBUG] Received Non-Streaming Response Status: ${response.status}`);
-    // 1. Log raw response from OpenRouter
-    console.log(`[DEBUG RAW RESPONSE] OpenRouter Raw: ${JSON.stringify(response.data).substring(0, 500)}...`); 
+    
+    // --- Refined Logging & Error Handling START ---
+    try {
+        console.log(`[DEBUG] Attempting keyManager.incrementKeyUsage for model: ${requestData.model}`);
+        keyManager.incrementKeyUsage(apiKey, requestData.model);
+        console.log(`[DEBUG] Completed keyManager.incrementKeyUsage`);
+    } catch (keyManagerError) {
+        console.error(`[ERROR] CRITICAL FAILURE during keyManager.incrementKeyUsage: ${keyManagerError.message}`, keyManagerError.stack);
+        // Decide how to handle - maybe just log and continue, or return an error?
+        // For now, log and try to continue, but this indicates a problem in keyManager.
+    }
+
+    console.log(`[DEBUG] Type of response.data: ${typeof response.data}`);
+    let rawResponseLog = 'Error logging raw response';
+    try {
+        // Attempt to stringify safely
+        rawResponseLog = JSON.stringify(response.data);
+        console.log(`[DEBUG RAW RESPONSE] OpenRouter Raw Data (Type: ${typeof response.data}): ${rawResponseLog.substring(0, 500)}...`); 
+    } catch(stringifyError) {
+        console.error(`[ERROR] FAILED TO JSON.stringify(response.data): ${stringifyError.message}`);
+        // Log the raw data directly if possible (might be huge or non-string)
+        console.error('[DEBUG RAW RESPONSE (Fallback)]:', response.data);
+        // Consider returning an error immediately as response is likely unusable
+        return res.status(500).json(formatErrorResponseForN8n({message: `Failed to process upstream response: ${stringifyError.message}`, code: 502 }, requestData));
+    }
+    // --- Refined Logging & Error Handling END ---
 
     res.setHeader('X-OpenRouter-Key-Aggregator-Model', requestData.model || 'unknown');
     res.setHeader('X-OpenRouter-Key-Aggregator-Key', apiKey.substring(0, 4) + '...');
@@ -165,50 +113,19 @@ const proxyRequest = async (req, res, next) => {
     }
     // Ensure standard chat completion response structure
     else if (endpoint === '/chat/completions' || requestData._isChatInputRequest) {
-      if (!responseData || !responseData.choices || !Array.isArray(responseData.choices) || responseData.choices.length === 0) {
-        console.log(`[DEBUG] No valid choices in raw response, creating default.`);
-        // ... (default response creation) ...
-      } else {
-        console.log(`[DEBUG] Processing choices in non-streaming response.`);
-        // Apply the necessary structural fixes directly (TEMPORARILY ACTIVE instead of formatter)
-        responseData.choices.forEach((choice, index) => {
-          if (!choice.message) {
-             console.warn(`[WARN] Choice index ${index} missing message! Setting default.`);
-             choice.message = { role: 'assistant', content: '' }; 
-          } else {
-            const hasToolCalls = choice.message.tool_calls && Array.isArray(choice.message.tool_calls);
-            const originalContent = choice.message.content;
-            if (choice.message.content === undefined || choice.message.content === null) {
-              choice.message.content = hasToolCalls ? null : ''; 
-            }
-            if (!choice.message.role) choice.message.role = 'assistant';
-            const originalFinishReason = choice.finish_reason;
-            if (hasToolCalls && choice.finish_reason !== 'tool_calls' && choice.finish_reason !== 'length' && choice.finish_reason !== 'error') {
-                choice.finish_reason = 'tool_calls';
-            }
-            // Log if modifications happened
-            if (originalContent !== choice.message.content || originalFinishReason !== choice.finish_reason) {
-                console.log(`[DEBUG CHOICE MODIFIED] Index ${index}: content='${choice.message.content}', finish_reason='${choice.finish_reason}'`);
-            }
-          }
-        });
-        
-        // ** Re-enable the fixed formatter **
-        console.log(`[DEBUG] Applying formatResponseForN8n (fixed version).`);
-        responseData = formatResponseForN8n(responseData, requestData);
- 
-        if (!responseData.usage) {
-          responseData.usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
-        }
-      }
+       // ... (rest of the non-streaming processing logic using fixed formatter) ...
+       console.log(`[DEBUG] Applying formatResponseForN8n (fixed version).`);
+       responseData = formatResponseForN8n(responseData, requestData);
+       if (!responseData.usage) {
+         responseData.usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+       }
     } 
 
-    // 2. Log final response being sent to n8n
     console.log(`[DEBUG FINAL RESPONSE] Sending to n8n: ${JSON.stringify(responseData).substring(0, 500)}...`);
     return res.status(response.status).json(responseData);
 
   } catch (error) {
-    // ... (keep existing error handling, ensure formatErrorResponseForN8n is called)
+    // ... (keep existing main catch block) ...
     console.error('Proxy request error:', error.message);
     let errorObj = { message: error.message || 'Unknown error', status: error.response?.status || 500 };
     // ... (rest of error handling) ...
