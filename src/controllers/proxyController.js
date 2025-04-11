@@ -111,8 +111,24 @@ const proxyRequest = async (req, res, next) => {
       // Increment key usage
       keyManager.incrementKeyUsage(apiKey, requestData.model);
       
-      // Pipe the stream directly to the response
-      axiosResponse.data.pipe(res);
+      // Create a transform stream to handle the SSE format properly
+      const { Transform } = require('stream');
+      const transformStream = new Transform({
+        transform(chunk, encoding, callback) {
+          // Convert chunk to string
+          const chunkStr = chunk.toString();
+          
+          // Log the chunk for debugging
+          console.log(`[STREAM] Received chunk: ${chunkStr.substring(0, 100)}...`);
+          
+          // Pass through the chunk unchanged
+          this.push(chunk);
+          callback();
+        }
+      });
+      
+      // Pipe through the transform stream
+      axiosResponse.data.pipe(transformStream).pipe(res);
       
       // Handle errors in the stream
       axiosResponse.data.on('error', (error) => {
