@@ -1,8 +1,10 @@
 /**
  * OpenAI-Compatible Authentication Middleware for OpenRouter Key Aggregator
- * 
+ *
  * This middleware ensures compatibility with the OpenAI API specification
  * and handles authentication according to OpenAI's documentation.
+ *
+ * Updated to handle n8n's OpenAI node authentication patterns.
  */
 const apiKeyManager = require('../utils/apiKeyManager');
 
@@ -11,32 +13,40 @@ const apiKeyManager = require('../utils/apiKeyManager');
  */
 const authenticateOpenAI = (req, res, next) => {
   console.log(`[AUTH] Authenticating OpenAI-compatible request to ${req.path}`);
-  
+
   // Extract API key following OpenAI's authentication patterns
   // OpenAI primarily uses Bearer token authentication
   let apiKey = null;
-  
+
+  // Log all headers for debugging (case-insensitive check)
+  const headerKeys = Object.keys(req.headers);
+  console.log(`[AUTH] Available header keys: ${JSON.stringify(headerKeys)}`);
+
   // 1. Check Authorization header with Bearer prefix (OpenAI's primary method)
-  if (req.headers['authorization'] && req.headers['authorization'].startsWith('Bearer ')) {
-    apiKey = req.headers['authorization'].substring(7); // Remove 'Bearer ' prefix
+  const authHeader = headerKeys.find(key => key.toLowerCase() === 'authorization');
+  if (authHeader && req.headers[authHeader].startsWith('Bearer ')) {
+    apiKey = req.headers[authHeader].substring(7); // Remove 'Bearer ' prefix
     console.log(`[AUTH] Found API key in Authorization header with Bearer prefix`);
-  } 
+  }
   // 2. Check for OpenAI-API-Key header (alternative method)
-  else if (req.headers['openai-api-key']) {
-    apiKey = req.headers['openai-api-key'];
+  const openaiApiKeyHeader = headerKeys.find(key => key.toLowerCase() === 'openai-api-key');
+  if (!apiKey && openaiApiKeyHeader) {
+    apiKey = req.headers[openaiApiKeyHeader];
     console.log(`[AUTH] Found API key in openai-api-key header`);
   }
   // 3. Check for api-key header (alternative method)
-  else if (req.headers['api-key']) {
-    apiKey = req.headers['api-key'];
+  const apiKeyHeader = headerKeys.find(key => key.toLowerCase() === 'api-key');
+  if (!apiKey && apiKeyHeader) {
+    apiKey = req.headers[apiKeyHeader];
     console.log(`[AUTH] Found API key in api-key header`);
   }
   // 4. Check for x-api-key header (our custom method)
-  else if (req.headers['x-api-key']) {
-    apiKey = req.headers['x-api-key'];
+  const xApiKeyHeader = headerKeys.find(key => key.toLowerCase() === 'x-api-key');
+  if (!apiKey && xApiKeyHeader) {
+    apiKey = req.headers[xApiKeyHeader];
     console.log(`[AUTH] Found API key in x-api-key header`);
   }
-  
+
   // Log authentication attempt (masking the key for security)
   if (apiKey) {
     const maskedKey = `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`;
@@ -96,10 +106,10 @@ const authenticateOpenAI = (req, res, next) => {
 
   // Authentication successful
   console.log(`[AUTH] Authentication successful`);
-  
+
   // Add API key to request for use in downstream handlers
   req.apiKey = apiKey;
-  
+
   // Continue to next middleware
   next();
 };

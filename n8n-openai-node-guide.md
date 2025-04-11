@@ -2,6 +2,14 @@
 
 This guide provides detailed instructions for integrating the OpenRouter Key Aggregator with n8n's OpenAI node, addressing common authentication issues and providing best practices.
 
+## Common Authentication Issues
+
+The "No auth credentials found" error typically occurs due to one of the following reasons:
+
+1. **Header Case Sensitivity**: n8n may send headers with different casing than expected (e.g., `Authorization` vs `authorization`)
+2. **Base URL Configuration**: The base URL in n8n needs to be configured correctly without the `/v1` suffix
+3. **Authentication Method**: n8n uses different authentication methods depending on configuration
+
 ## OpenAI Node Configuration
 
 ### Step 1: Create OpenAI API Credentials in n8n
@@ -131,5 +139,14 @@ As per the OpenAI documentation, here are key concepts to understand:
 3. **Handle Errors Gracefully**: Add error handling nodes to your workflow to handle potential API errors.
 
 4. **Test with Simple Prompts**: When troubleshooting, use simple prompts to isolate issues.
+
+## Technical Details
+
+The OpenRouter Key Aggregator has been updated to handle n8n's authentication patterns:
+
+1. **Case-Insensitive Header Checking**: Headers are now checked in a case-insensitive manner to handle variations in how n8n sends authentication headers
+2. **Multiple Authentication Methods**: Support for Bearer token, api-key, and openai-api-key headers to accommodate different n8n configurations
+3. **Path Handling**: Special handling for different base URL configurations, including when the base URL includes or excludes the `/v1` suffix
+4. **Error Formatting**: Error responses match OpenAI's format exactly to ensure proper error handling in n8n
 
 By following this guide, you should be able to successfully integrate the OpenRouter Key Aggregator with n8n's OpenAI node.
