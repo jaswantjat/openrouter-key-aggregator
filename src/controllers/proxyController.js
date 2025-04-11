@@ -2,7 +2,7 @@
  * Enhanced Proxy Controller with Streaming Support
  * 
  * This controller handles proxying requests to OpenRouter API with special
- * handling for streaming responses.
+ * handling for streaming responses and n8n-specific formats.
  */
 const axios = require('axios');
 const keyManager = require('../utils/keyManager');
@@ -56,6 +56,7 @@ const proxyRequest = async (req, res, next) => {
     // n8n might send a single string in chatInput instead of a properly formatted messages array
     if (requestData.chatInput !== undefined) {
       console.log(`[DEBUG] Detected n8n LangChain format with chatInput: ${requestData.chatInput}`);
+      
       // Convert chatInput to proper messages format
       try {
         // If messages array already exists, don't overwrite it
@@ -66,9 +67,23 @@ const proxyRequest = async (req, res, next) => {
               content: String(requestData.chatInput)
             }
           ];
+        } else if (requestData.messages.length > 0) {
+          // If there's an existing system message but no user message, add the chatInput as a user message
+          const hasSystemMessage = requestData.messages.some(msg => msg.role === 'system');
+          const hasUserMessage = requestData.messages.some(msg => msg.role === 'user');
+          
+          if (hasSystemMessage && !hasUserMessage) {
+            requestData.messages.push({
+              role: 'user',
+              content: String(requestData.chatInput)
+            });
+          }
         }
+        
         // Mark this as a chatInput request for special handling later
         requestData._isChatInputRequest = true;
+        
+        console.log(`[DEBUG] Converted chatInput to messages: ${JSON.stringify(requestData.messages)}`);
       } catch (error) {
         console.error(`[ERROR] Failed to convert chatInput to messages: ${error.message}`);
       }
@@ -81,6 +96,11 @@ const proxyRequest = async (req, res, next) => {
     if (openRouterRequestData.chatInput !== undefined) {
       console.log(`[DEBUG] Removing chatInput parameter before sending to OpenRouter`);
       delete openRouterRequestData.chatInput;
+    }
+    
+    // Remove internal flags
+    if (openRouterRequestData._isChatInputRequest !== undefined) {
+      delete openRouterRequestData._isChatInputRequest;
     }
 
     // Check if streaming is requested
@@ -119,7 +139,7 @@ const proxyRequest = async (req, res, next) => {
           // Convert chunk to string
           const chunkStr = chunk.toString();
           
-          // Log the chunk for debugging
+          // Log the chunk for debugging (truncated to avoid huge logs)
           console.log(`[STREAM] Received chunk: ${chunkStr.substring(0, 100)}...`);
           
           // Process the chunk to ensure it has the right format for n8n's LangChain integration
@@ -145,33 +165,69 @@ const proxyRequest = async (req, res, next) => {
                   // Parse the JSON data
                   const jsonData = JSON.parse(data);
                   
-                  // Check if this is a delta format (streaming)
-                  if (jsonData.choices && jsonData.choices.length > 0 && jsonData.choices[0].delta) {
-                    // This is a streaming response with delta format
-                    const choice = jsonData.choices[0];
-                    
-                    // Create a new choice with both delta and message properties
-                    // This ensures compatibility with n8n's LangChain integration
-                    const newChoice = {
-                      ...choice,
-                      message: {
-                        role: choice.delta.role || 'assistant',
-                        content: choice.delta.content || ''
-                      }
-                    };
-                    
-                    // Create a new JSON object with the modified choice
-                    const newJsonData = {
-                      ...jsonData,
-                      choices: [newChoice]
-                    };
-                    
-                    // Add the transformed line
-                    transformedLines.push(`data: ${JSON.stringify(newJsonData)}`);
-                  } else {
-                    // If it's not a delta format, pass it through unchanged
-                    transformedLines.push(line);
+                  // Create a new JSON object that we'll modify
+                  let newJsonData = { ...jsonData };
+                  
+                  // Ensure choices array exists
+                  if (!newJsonData.choices || !Array.isArray(newJsonData.choices)) {
+                    newJsonData.choices = [];
                   }
+                  
+                  // Process each choice
+                  newJsonData.choices = newJsonData.choices.map((choice, index) => {
+                    // Create a new choice object
+                    const newChoice = { ...choice };
+                    
+                    // Handle delta format (streaming)
+                    if (choice.delta) {
+                      // Ensure message exists with content
+                      newChoice.message = {
+                        role: choice.delta.role || 'assistant',
+                        content: choice.delta.content !== undefined ? choice.delta.content : ''
+                      };
+                      
+                      // Copy tool_calls if they exist
+                      if (choice.delta.tool_calls) {
+                        newChoice.message.tool_calls = choice.delta.tool_calls;
+                      }
+                    } 
+                    // Handle message format (non-streaming or already transformed)
+                    else if (choice.message) {
+                      // Ensure content exists
+                      if (choice.message.content === undefined || choice.message.content === null) {
+                        newChoice.message = {
+                          ...choice.message,
+                          content: '' // Ensure content is at least an empty string
+                        };
+                      }
+                    } 
+                    // Handle case where neither delta nor message exists
+                    else {
+                      newChoice.message = {
+                        role: 'assistant',
+                        content: '' // Default empty content
+                      };
+                    }
+                    
+                    return newChoice;
+                  });
+                  
+                  // If choices array is empty, add a default choice
+                  if (newJsonData.choices.length === 0) {
+                    newJsonData.choices.push({
+                      index: 0,
+                      message: {
+                        role: 'assistant',
+                        content: ''
+                      }
+                    });
+                  }
+                  
+                  // Add the transformed line
+                  transformedLines.push(`data: ${JSON.stringify(newJsonData)}`);
+                  
+                  // Log the transformation for debugging
+                  console.log(`[STREAM] Transformed chunk to ensure message.content exists`);
                 } catch (error) {
                   // If there's an error parsing the JSON, pass the line through unchanged
                   console.error(`[ERROR] Failed to parse JSON in streaming response: ${error.message}`);
@@ -205,6 +261,28 @@ const proxyRequest = async (req, res, next) => {
       axiosResponse.data.on('error', (error) => {
         console.error(`[ERROR] Stream error: ${error.message}`);
         // We can't send headers at this point, as some data might have been sent already
+        
+        // Try to send an error event if possible
+        try {
+          const errorEvent = `data: ${JSON.stringify({
+            error: {
+              message: error.message,
+              type: 'stream_error'
+            },
+            choices: [{
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: `Error: ${error.message}`
+              },
+              finish_reason: 'error'
+            }]
+          })}\n\ndata: [DONE]\n\n`;
+          
+          res.write(errorEvent);
+        } catch (writeError) {
+          console.error(`[ERROR] Failed to write error event to stream: ${writeError.message}`);
+        }
       });
       
       return; // Return early, as we're handling the response via pipe
@@ -231,7 +309,7 @@ const proxyRequest = async (req, res, next) => {
     res.setHeader('X-OpenRouter-Key-Aggregator-Model', requestData.model);
     res.setHeader('X-OpenRouter-Key-Aggregator-Key', apiKey.substring(0, 4) + '...');
 
-    // Log the response structure for debugging
+    // Log the response structure for debugging (truncated to avoid huge logs)
     console.log(`[DEBUG] Response structure: ${JSON.stringify(response.data).substring(0, 200)}...`);
 
     // Special handling for OpenRouter error responses
@@ -290,6 +368,25 @@ const proxyRequest = async (req, res, next) => {
         };
       } else {
         console.log(`[DEBUG] Processing ${response.data.choices.length} choices in response`);
+        
+        // Ensure each choice has a message with content
+        response.data.choices.forEach(choice => {
+          if (!choice.message) {
+            choice.message = {
+              role: 'assistant',
+              content: 'No content available'
+            };
+          } else if (choice.message.content === undefined || choice.message.content === null) {
+            // Ensure content is at least an empty string, never undefined or null
+            choice.message.content = '';
+          }
+          
+          // Ensure role is set
+          if (!choice.message.role) {
+            choice.message.role = 'assistant';
+          }
+        });
+        
         // Use the n8n response formatter to ensure the response is compatible with n8n
         console.log(`[DEBUG] Using n8n response formatter to ensure compatibility`);
         response.data = formatResponseForN8n(response.data, requestData);
