@@ -94,25 +94,20 @@ const proxyRequest = async (req, res, next) => {
                 }
                 try {
                   const jsonData = JSON.parse(data);
+                  // Apply content/tool_call refinement directly to the stream chunk
                   if (jsonData.choices && Array.isArray(jsonData.choices) && jsonData.choices.length > 0) {
                     const choice = jsonData.choices[0];
-                    
                     if (choice.delta) {
-                       if (!choice.delta.role) choice.delta.role = 'assistant'; // Default role
-                       
+                       if (!choice.delta.role) choice.delta.role = 'assistant'; 
                        const hasToolCalls = choice.delta.tool_calls && Array.isArray(choice.delta.tool_calls);
-                       
-                       // ** Refined Content Handling for Streaming **
                        if (choice.delta.content === undefined || choice.delta.content === null) { 
-                           // If content is missing/null: set to null if tool calls exist, otherwise empty string
                            choice.delta.content = hasToolCalls ? null : ''; 
-                       } 
-                       // (If content is present, keep it as is)
-
-                       console.log(`[STREAM] Adjusted delta: ${JSON.stringify(choice.delta)}`);
+                       }
+                       // Log adjusted delta (optional)
+                       // console.log(`[STREAM] Adjusted delta: ${JSON.stringify(choice.delta)}`);
                     }
                   } else {
-                     console.log(`[STREAM] Chunk has no choices or delta, passing through: ${data}`);
+                     // console.log(`[STREAM] Chunk has no choices or delta: ${data}`);
                   }
                   transformedLines.push(`data: ${JSON.stringify(jsonData)}`);
                 } catch (error) {
@@ -146,21 +141,21 @@ const proxyRequest = async (req, res, next) => {
 data: [DONE]
 
 `;
-          if (!res.headersSent) { // Check if headers are already sent
+          if (!res.headersSent) {
              res.write(errorEvent);
-             res.end(); // End the response for stream errors
+             res.end();
           } else {
              console.error('[ERROR] Headers already sent, cannot write stream error event.');
           }
         } catch (writeError) {
           console.error(`[ERROR] Failed to write error event to stream: ${writeError.message}`);
-          if (!res.headersSent) res.end(); // Attempt to end response on write error
+          if (!res.headersSent) res.end();
         }
       });
       
       axiosResponse.data.on('end', () => {
          console.log('[STREAM] Source stream ended.');
-         if (!res.writableEnded) { // Ensure response ends if not already ended by error handler
+         if (!res.writableEnded) {
             res.end(); 
          }
       });
@@ -180,29 +175,20 @@ data: [DONE]
     console.log(`[DEBUG] Non-streaming request sent to OpenRouter with model: ${requestData.model}`);
     keyManager.incrementKeyUsage(apiKey, requestData.model);
     console.log(`Received non-streaming response from OpenRouter status: ${response.status}`);
-    console.log(`[DEBUG] Response structure: ${JSON.stringify(response.data).substring(0, 200)}...`);
+    console.log(`[DEBUG] Raw response structure: ${JSON.stringify(response.data).substring(0, 200)}...`); // Log raw response
 
     res.setHeader('X-OpenRouter-Key-Aggregator-Model', requestData.model || 'unknown');
     res.setHeader('X-OpenRouter-Key-Aggregator-Key', apiKey.substring(0, 4) + '...');
 
     let responseData = response.data;
 
-    // Handle OpenRouter error format
+    // Handle OpenRouter specific error format first
     if (responseData && responseData.error && !responseData.choices) {
       console.log(`[DEBUG] Detected OpenRouter error response: ${JSON.stringify(responseData.error)}`);
-      responseData = {
-        id: `error-${Date.now()}`, object: 'chat.completion', created: Math.floor(Date.now() / 1000),
-        model: requestData.model || 'error',
-        choices: [{
-          index: 0,
-          message: { role: 'assistant', content: `Error: ${responseData.error.message || 'Unknown error'}` },
-          finish_reason: 'error'
-        }],
-        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-        error: responseData.error
-      };
+      // Use the error formatter directly
+      responseData = formatErrorResponseForN8n(responseData.error, requestData);
     }
-    // Ensure standard chat completion response structure for n8n
+    // Ensure standard chat completion response structure
     else if (endpoint === '/chat/completions' || requestData._isChatInputRequest) {
       if (!responseData || !responseData.choices || !Array.isArray(responseData.choices) || responseData.choices.length === 0) {
         console.log(`[DEBUG] No valid choices in response, creating default response`);
@@ -216,33 +202,33 @@ data: [DONE]
         };
       } else {
         console.log(`[DEBUG] Processing ${responseData.choices.length} choices in non-streaming response`);
+        // Apply the necessary structural fixes directly to the received data
         responseData.choices.forEach(choice => {
           if (!choice.message) {
             choice.message = { role: 'assistant', content: '' }; // Default if message completely missing
           } else {
             const hasToolCalls = choice.message.tool_calls && Array.isArray(choice.message.tool_calls);
-            
-            // ** Refined Content Handling for Non-Streaming **
             if (choice.message.content === undefined || choice.message.content === null) {
-              // If content missing/null: set to null if tool calls exist, otherwise empty string
               choice.message.content = hasToolCalls ? null : ''; 
             }
-            
-            if (!choice.message.role) choice.message.role = 'assistant'; // Ensure role
+            if (!choice.message.role) choice.message.role = 'assistant';
+            // Ensure finish_reason is appropriate if tool calls were made
+            if (hasToolCalls && choice.finish_reason !== 'tool_calls' && choice.finish_reason !== 'length' && choice.finish_reason !== 'error') {
+                choice.finish_reason = 'tool_calls';
+            }
           }
         });
-      }
-      // Apply n8n formatter if needed (e.g., for specific chatInput handling, though less critical now)
-      console.log(`[DEBUG] Applying n8n response formatter potentially.`);
-      responseData = formatResponseForN8n(responseData, requestData);
-      
+        // TEMPORARILY COMMENTED OUT: responseData = formatResponseForN8n(responseData, requestData);
+        // console.log(`[DEBUG] Skipped call to formatResponseForN8n for testing.`);
        if (!responseData.usage) {
           responseData.usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
        }
-    }
+      }
+    } // End of chat completion processing
 
-    responseData._debug = { timestamp: new Date().toISOString(), endpoint: endpoint, requestedModel: requestData.model };
-    console.log(`[DEBUG] Final formatted response: ${JSON.stringify(responseData).substring(0, 200)}...`);
+    // Add debug info (optional)
+    // responseData._debug = { timestamp: new Date().toISOString(), endpoint: endpoint, requestedModel: requestData.model };
+    console.log(`[DEBUG] Final response being sent: ${JSON.stringify(responseData).substring(0, 200)}...`);
     return res.status(response.status).json(responseData);
 
   } catch (error) {
@@ -258,26 +244,16 @@ data: [DONE]
       console.error(`Recorded rate limit error for API key: ${apiKey.substring(0, 4)}...`);
     }
 
-    let errorMessage = error.message || 'Unknown error';
-    let errorStatus = error.response?.status || 500;
-    let errorData = error.response?.data || null;
-
+    let errorObj = { message: error.message || 'Unknown error', status: error.response?.status || 500 };
     if (error.response?.data?.error) { // Handle nested OpenRouter error object
-      const openRouterError = error.response.data.error;
-      errorMessage = openRouterError.message || errorMessage;
-      // errorStatus = openRouterError.code || errorStatus; // OpenRouter code might not be HTTP status
-      errorData = openRouterError;
+       errorObj = { ...errorObj, ...error.response.data.error }; // Merge OpenRouter error details
+       if (!errorObj.status && errorObj.code) errorObj.status = 500; // Use 500 if OR code isn't HTTP status
     }
-
-    const errorObj = { message: errorMessage, status: errorStatus, data: errorData };
+    
     const errorResponse = formatErrorResponseForN8n(errorObj, req.body || {});
     console.log(`[DEBUG] Created error response for n8n: ${JSON.stringify(errorResponse).substring(0, 200)}...`);
-    errorResponse._debug = { timestamp: new Date().toISOString(), originalError: { message: error.message, stack: error.stack?.split('
-')[0], code: error.code }, responseData: error.response?.data ? JSON.stringify(error.response.data).substring(0, 500) : null, requestPath: req.path, requestModel: req.body?.model || 'unknown' };
-
-    // Ensure status is a valid HTTP status code
-    const finalStatus = (typeof errorStatus === 'number' && errorStatus >= 100 && errorStatus <= 599) ? errorStatus : 500;
-    return res.status(finalStatus).json(errorResponse);
+    // Use status from formatted error, which has validation
+    return res.status(errorResponse.error.code || 500).json(errorResponse);
   }
 };
 
