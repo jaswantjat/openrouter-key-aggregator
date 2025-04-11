@@ -6,10 +6,10 @@ const keyManager = require('../utils/keyManager');
 const { formatResponseForN8n, formatErrorResponseForN8n } = require('../utils/n8nResponseFormatter'); 
 const { Transform } = require('stream');
 
-console.log('>>>> PROXYCONTROLLER.JS LOADED - COMMIT 0ced0ad (SyntaxFix Attempt 2) <<<<');
+console.log('>>>> PROXYCONTROLLER.JS LOADED - COMMIT 4f22f16 (SyntaxFix Attempt 3) <<<<');
 
 const proxyRequest = async (req, res, next) => {
-  console.log('>>>> PROXYREQUEST FUNCTION CALLED - COMMIT 0ced0ad (SyntaxFix Attempt 2) <<<<');
+  console.log('>>>> PROXYREQUEST FUNCTION CALLED - COMMIT 4f22f16 (SyntaxFix Attempt 3) <<<<');
   try {
     console.log('[DEBUG ENTER] Entered proxyRequest function.'); 
     const apiKey = keyManager.getNextKey();
@@ -71,7 +71,7 @@ const proxyRequest = async (req, res, next) => {
                const chunkStr = chunk.toString();
                console.log(`[STREAM RAW] Chunk: ${chunkStr.substring(0,100)}`);
                try {
-                   // --- CORRECTED LINE AGAIN --- 
+                   // --- CORRECTED LINE FINAL CHECK --- 
                    const lines = chunkStr.split('
 ').filter(line => line.trim() !== ''); // Use '
 ' escape sequence
