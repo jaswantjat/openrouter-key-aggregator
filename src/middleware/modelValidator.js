@@ -4,34 +4,28 @@
  */
 
 const modelValidator = (req, res, next) => {
-  // Skip validation for non-POST requests or requests without a body
   if (req.method !== 'POST' || !req.body) {
     return next();
   }
 
-  // Log the request for debugging
   console.log(`[DEBUG] Model validation for request body: ${JSON.stringify(req.body)}`);
 
-  // Check if model is specified
   if (!req.body.model) {
-    console.log('[DEBUG] No model specified in request');
-    // Allow the request to continue - the proxy controller will set a default model
+    console.log('[DEBUG] No model specified in request, using default');
     return next();
   }
 
-  // Validate model format
-  // Valid formats:
-  // - provider/model-name:variant (e.g., meta-llama/llama-4-scout:free)
-  // - provider/model-name (e.g., meta-llama/llama-4-scout)
-  // - model-name (e.g., llama-4-scout)
-  // - simplified name (e.g., scout)
-  const validModelFormat = /^([a-z0-9-]+\/)?[a-z0-9-]+(:[a-z0-9-]+)?$/i;
+  // --- CORRECTED REGEX TO ALLOW DOTS --- 
+  // Valid formats allow dots in the model name part
+  const validModelFormat = /^([a-z0-9-]+\/)?[a-z0-9.-]+(:[a-z0-9-]+)?$/i;
+  // --- END CORRECTION ---
   
   if (!validModelFormat.test(req.body.model)) {
-    console.log(`[DEBUG] Invalid model format: ${req.body.model}`);
+    console.log(`[DEBUG] Invalid model format detected by regex: ${req.body.model}`);
+    // Return 404 for consistency with OpenAI behavior for non-existent models
     return res.status(404).json({
       error: {
-        message: `The model '${req.body.model}' does not exist or you don't have access to it`,
+        message: `The model '${req.body.model}' does not exist or you don't have access to it.`,
         type: "invalid_request_error",
         param: "model",
         code: "model_not_found"
@@ -42,9 +36,8 @@ const modelValidator = (req, res, next) => {
     });
   }
 
-  // Model format is valid, proceed
-  console.log(`[DEBUG] Valid model format: ${req.body.model}`);
-  next();
+  console.log(`[DEBUG] Valid model format passed regex check: ${req.body.model}`);
+  next(); // Proceed to the next middleware or route handler
 };
 
 module.exports = { modelValidator };
