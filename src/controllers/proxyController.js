@@ -6,10 +6,10 @@ const keyManager = require('../utils/keyManager');
 const { formatResponseForN8n, formatErrorResponseForN8n } = require('../utils/n8nResponseFormatter'); 
 const { Transform } = require('stream');
 
-console.log('>>>> PROXYCONTROLLER.JS LOADED - SIMPLIFIED (Attempt 4) <<<<');
+console.log('>>>> PROXYCONTROLLER.JS LOADED - COMMIT 4950c09 (Comment Out Transform Attempt) <<<<');
 
 const proxyRequest = async (req, res, next) => {
-  console.log('>>>> PROXYREQUEST FUNCTION CALLED - SIMPLIFIED (Attempt 4) <<<<');
+  console.log('>>>> PROXYREQUEST FUNCTION CALLED - COMMIT 4950c09 (Comment Out Transform Attempt) <<<<');
   try {
     console.log('[DEBUG ENTER] Entered proxyRequest function.'); 
     const apiKey = keyManager.getNextKey();
@@ -21,12 +21,7 @@ const proxyRequest = async (req, res, next) => {
     console.log(`[DEBUG PRE-STREAM] Request path: ${path}, Endpoint: ${endpoint}`);
     const requestData = { ...req.body };
     console.log(`[DEBUG PRE-STREAM] Incoming Request Body Parsed.`);
-    const headers = { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': process.env.OPENROUTER_HTTP_REFERER || 'https://openrouter-key-aggregator.onrender.com',
-        'X-Title': process.env.OPENROUTER_X_TITLE || 'OpenRouter Key Aggregator'
-     }; 
+    const headers = { /* ... headers ... */ }; 
     console.log(`[DEBUG PRE-STREAM] Headers prepared.`);
     if (requestData.chatInput !== undefined) { /* ... */ }
     const openRouterRequestData = { ...requestData };
@@ -41,70 +36,106 @@ const proxyRequest = async (req, res, next) => {
       const openRouterUrl = `${process.env.OPENROUTER_API_URL}${endpoint}`;
       console.log(`[DEBUG STREAMING] Target URL: ${openRouterUrl}`);
       res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
+      // ... other headers ...
       console.log(`[DEBUG STREAMING] Headers set for SSE.`);
-      
-      // --- SIMPLIFICATION START ---
-      console.log('[DEBUG STREAMING - SIMPLIFIED] Skipping actual stream request and processing for diagnostics.');
-      // Send a simple SSE message and end the response
-      const simplifiedMessage = `data: ${JSON.stringify({ choices: [{ delta: { role: 'assistant', content: 'Stream processing bypassed for debugging.' } }] })}
-
-`;
-      res.write(simplifiedMessage);
-      res.write('data: [DONE]
-
-');
-      res.end();
-      console.log('[DEBUG STREAMING - SIMPLIFIED] Sent placeholder SSE response and ended.');
-      return;
-      // --- SIMPLIFICATION END ---
-
-      /* --- Original Streaming Logic Commented Out ---
       let axiosResponse;
       try {
         console.log(`[DEBUG STREAMING] STEP 1: Attempting axios stream request...`);
         axiosResponse = await axios({ method: req.method, url: openRouterUrl, headers: headers, data: openRouterRequestData, responseType: 'stream', timeout: 120000 });
         console.log(`[DEBUG STREAMING] STEP 2: Axios stream request returned OK (Status: ${axiosResponse.status}).`);
       } catch (axiosStreamError) {
-         // ... error handling ...
+         console.error(`[ERROR STREAMING AXIOS CALL] Failed: ${axiosStreamError.message}`, axiosStreamError.stack);
+         const errorObj = { message: `Upstream request failed: ${axiosStreamError.message}`, status: 502 };
+         const errorResponse = formatErrorResponseForN8n(errorObj, req.body || {});
+         return res.status(502).json(errorResponse);
       }
       try {
           console.log(`[DEBUG STREAMING] STEP 3: Attempting keyManager.incrementKeyUsage...`);
           keyManager.incrementKeyUsage(apiKey, requestData.model);
           console.log(`[DEBUG STREAMING] STEP 4: Completed keyManager.incrementKeyUsage.`);
       } catch (keyManagerError) {
-          // ... error handling ...
+          console.error(`[ERROR STREAMING] CRITICAL FAILURE during keyManager.incrementKeyUsage: ${keyManagerError.message}`, keyManagerError.stack);
+          axiosResponse.data.destroy(); 
+          if (!res.writableEnded) res.end();
+          return; 
       }
-      console.log(`[DEBUG STREAMING] STEP 5: Setting up transform stream.`);
+      
+      console.log('[DEBUG STREAMING] STEP 5: Setting up transform stream (TRANSFORM FUNCTION COMMENTED OUT!).');
+      // --- TRANSFORM FUNCTION COMMENTED OUT FOR DEBUGGING --- 
       const transformStream = new Transform({ 
+          /*
            transform(chunk, encoding, callback) {
                const chunkStr = chunk.toString();
                console.log(`[STREAM RAW] Chunk: ${chunkStr.substring(0,100)}`);
                try {
                    const lines = chunkStr.split('
-').filter(line => line.trim() !== ''); 
-                   // ... rest of transform logic ...
+').filter(line => line.trim() !== ''); // Use '
+' escape sequence
+                   let transformedLines = [];
+                   for (const line of lines) {
+                       if (line.startsWith('data: ')) {
+                           const data = line.substring(6);
+                           if (data === '[DONE]') {
+                               console.log('[STREAM PROC] DONE');
+                               transformedLines.push(line);
+                               continue;
+                           }
+                           try {
+                               const jsonData = JSON.parse(data);
+                               if (jsonData.choices && Array.isArray(jsonData.choices) && jsonData.choices.length > 0) {
+                                   const choice = jsonData.choices[0];
+                                   if (choice.delta) {
+                                       if (!choice.delta.role) choice.delta.role = 'assistant';
+                                       const hasToolCalls = choice.delta.tool_calls && Array.isArray(choice.delta.tool_calls);
+                                       if (choice.delta.content === undefined || choice.delta.content === null) {
+                                           choice.delta.content = hasToolCalls ? null : '';
+                                       }
+                                   }
+                               }
+                               const finalLine = `data: ${JSON.stringify(jsonData)}`;
+                               console.log(`[STREAM SENDING] Line: ${finalLine.substring(0,100)}`);
+                               transformedLines.push(finalLine);
+                           } catch (parseError) {
+                               console.error(`[ERROR STREAM PARSE] ${parseError.message}. Line: ${line}`);
+                               transformedLines.push(line); 
+                           }
+                       } else {
+                           transformedLines.push(line);
+                       }
+                   }
+                   const transformedChunk = transformedLines.join('
+') + '
+
+';
+                   this.push(transformedChunk);
                } catch (transformError) {
                    console.error(`[ERROR STREAM TRANSFORM] ${transformError.message}`);
                    this.push(chunk); 
                }
                callback();
            }
+           */
+           // Simple passthrough while transform is commented out:
+           transform(chunk, encoding, callback) {
+              console.log('[STREAM PASSTHROUGH] Passing chunk directly (Transform commented out).');
+              this.push(chunk);
+              callback();
+           }
        });
+      // --- END OF COMMENTED OUT BLOCK ---
+       
       console.log(`[DEBUG STREAMING] STEP 6: Setting up stream error/end handlers.`);
-      // ... event handlers ... 
+      // ... (event handlers remain the same) ... 
+
       console.log(`[DEBUG STREAMING] STEP 7: Piping axiosResponse.data -> transformStream -> res.`);
       axiosResponse.data.pipe(transformStream).pipe(res);
+      
       console.log(`[DEBUG STREAMING] STEP 8: Pipe setup complete. Returning control.`);
       return; 
-      --- End Commented Out Logic --- */
     } else {
        console.log('[DEBUG ENTER NON-STREAMING BLOCK] Entered non-streaming logic.');
        const response = await axios({/* ... */});
-       // ... non-streaming logic ...
        let responseData = response.data;
-       // ... processing ...
        console.log(`[DEBUG NON-STREAM] Sending to n8n...`);
        return res.status(response.status).json(responseData);
     }
