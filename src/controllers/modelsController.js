@@ -2,312 +2,117 @@
  * Controller for OpenAI-compatible models endpoint
  */
 const axios = require('axios');
-// No need to import getNextKey as we're using the first key from the environment variable
 
-// Cache for models to avoid hitting OpenRouter API too frequently
 let modelsCache = null;
 let modelsCacheExpiry = 0;
-const CACHE_TTL = 3600000; // 1 hour in milliseconds
+const CACHE_TTL = 3600000; // 1 hour
 
 // List of free models from OpenRouter
-// ONLY include the exact model IDs as they appear in OpenRouter
-// Only include models that are actually working
+// Add models here to make them visible to clients like n8n
 const FREE_MODEL_IDS = [
   "meta-llama/llama-4-maverick:free",
   "meta-llama/llama-4-scout:free",
-  "deepseek/deepseek-chat-v3-0324:free"
-  // The following models are not working currently:
-  // "google/gemini-2.5-pro-exp-03-25:free",
-  // "google/gemini-2.0-flash-exp:free"
+  "deepseek/deepseek-chat-v3-0324:free",
+  "google/gemini-2.0-flash-exp:free" // Re-enabled Gemini Flash Experimental
+  // "google/gemini-2.5-pro-exp-03-25:free", // Keep others commented if not needed/working
 ];
 
-// We're not using any paid models for now
-const PAID_MODEL_IDS = [];
+const PAID_MODEL_IDS = []; // No paid models for now
 
-/**
- * Convert OpenRouter model format to OpenAI format
- */
+// Convert OpenRouter model format to OpenAI format
 const convertToOpenAIFormat = (openRouterModels) => {
   const openAIModels = [];
-
-  // Add models in multiple formats to ensure compatibility with different clients
   const addedModelIds = new Set();
 
-  // Add all free models with their exact IDs and additional formats for better compatibility
-  FREE_MODEL_IDS.forEach(modelId => {
-    // Extract provider and model name
+  // Use the defined lists to build the response
+  const targetModelIds = [...FREE_MODEL_IDS, ...PAID_MODEL_IDS];
+
+  targetModelIds.forEach(modelId => {
+    if (addedModelIds.has(modelId)) return; // Avoid duplicates
+
     const parts = modelId.split('/');
     const provider = parts[0];
     let modelName = parts[1] || modelId;
-
-    // Remove :free suffix if present
     const modelNameWithoutSuffix = modelName.split(':')[0];
 
-    // Format 1: Add the full model ID exactly as it appears in OpenRouter
+    // Format 1: Full ID
     openAIModels.push({
-      id: modelId,
-      object: "model",
-      created: Math.floor(Date.now() / 1000),
-      owned_by: provider,
-      permission: [{
-        id: `modelperm-${modelId.replace(/\//g, '-').replace(/:/g, '-')}`,
-        object: "model_permission",
-        created: Math.floor(Date.now() / 1000),
-        allow_create_engine: false,
-        allow_sampling: true,
-        allow_logprobs: true,
-        allow_search_indices: false,
-        allow_view: true,
-        allow_fine_tuning: false,
-        organization: "*",
-        group: null,
-        is_blocking: false
-      }],
-      root: modelId,
-      parent: null
+      id: modelId, object: "model", created: Math.floor(Date.now() / 1000), owned_by: provider,
+      permission: [{ id: `perm-${modelId}`, object: "model_permission", created: Date.now(), allow_create_engine: false, allow_sampling: true, allow_logprobs: true, allow_search_indices: false, allow_view: true, allow_fine_tuning: false, organization: "*", group: null, is_blocking: false }],
+      root: modelId, parent: null
     });
+    addedModelIds.add(modelId);
 
-    // Format 2: Add model name without provider (for n8n compatibility)
-    // This is critical for n8n which often uses just the model name
-    openAIModels.push({
-      id: modelName,
-      object: "model",
-      created: Math.floor(Date.now() / 1000),
-      owned_by: provider,
-      permission: [{
-        id: `modelperm-${modelName.replace(/\//g, '-').replace(/:/g, '-')}`,
-        object: "model_permission",
-        created: Math.floor(Date.now() / 1000),
-        allow_create_engine: false,
-        allow_sampling: true,
-        allow_logprobs: true,
-        allow_search_indices: false,
-        allow_view: true,
-        allow_fine_tuning: false,
-        organization: "*",
-        group: null,
-        is_blocking: false
-      }],
-      root: modelId, // Point to the full model ID
-      parent: null
-    });
-
-    // Format 3: Add model name without suffix (for n8n compatibility)
-    if (modelNameWithoutSuffix !== modelName) {
-      openAIModels.push({
-        id: modelNameWithoutSuffix,
-        object: "model",
-        created: Math.floor(Date.now() / 1000),
-        owned_by: provider,
-        permission: [{
-          id: `modelperm-${modelNameWithoutSuffix.replace(/\//g, '-').replace(/:/g, '-')}`,
-          object: "model_permission",
-          created: Math.floor(Date.now() / 1000),
-          allow_create_engine: false,
-          allow_sampling: true,
-          allow_logprobs: true,
-          allow_search_indices: false,
-          allow_view: true,
-          allow_fine_tuning: false,
-          organization: "*",
-          group: null,
-          is_blocking: false
-        }],
-        root: modelId, // Point to the full model ID
-        parent: null
-      });
+    // Format 2: Model Name with suffix (e.g., deepseek-chat-v3-0324:free)
+    if (!addedModelIds.has(modelName)) {
+        openAIModels.push({ id: modelName, object: "model", created: Math.floor(Date.now() / 1000), owned_by: provider, permission: [{ id: `perm-${modelName}`, object: "model_permission", /*...*/ }], root: modelId, parent: null });
+        addedModelIds.add(modelName);
     }
 
-    // Track that we've added this model
-    addedModelIds.add(modelId);
+    // Format 3: Model Name without suffix (e.g., deepseek-chat-v3-0324)
+    if (modelNameWithoutSuffix !== modelName && !addedModelIds.has(modelNameWithoutSuffix)) {
+        openAIModels.push({ id: modelNameWithoutSuffix, object: "model", created: Math.floor(Date.now() / 1000), owned_by: provider, permission: [{ id: `perm-${modelNameWithoutSuffix}`, object: "model_permission", /*...*/ }], root: modelId, parent: null });
+        addedModelIds.add(modelNameWithoutSuffix);
+    }
   });
 
-  // No special handling or aliases - only use exact model IDs
-
-  // Process all models from OpenRouter
-  if (openRouterModels && openRouterModels.data && Array.isArray(openRouterModels.data)) {
-    openRouterModels.data.forEach(model => {
-      // Only include models we're interested in and haven't already added
-      if ((FREE_MODEL_IDS.includes(model.id) || PAID_MODEL_IDS.includes(model.id)) && !addedModelIds.has(model.id)) {
-        // Extract provider and model name
-        const parts = model.id.split('/');
-        const provider = parts[0];
-        let modelName = parts[1] || model.id;
-
-        // Remove :free suffix if present
-        const modelNameWithoutSuffix = modelName.split(':')[0];
-
-        // Create the main model entry with the full ID
-        openAIModels.push({
-          id: model.id,
-          object: "model",
-          created: model.created || Math.floor(Date.now() / 1000),
-          owned_by: provider,
-          permission: [{
-            id: `modelperm-${model.id.replace(/\//g, '-').replace(/:/g, '-')}`,
-            object: "model_permission",
-            created: model.created || Math.floor(Date.now() / 1000),
-            allow_create_engine: false,
-            allow_sampling: true,
-            allow_logprobs: true,
-            allow_search_indices: false,
-            allow_view: true,
-            allow_fine_tuning: false,
-            organization: "*",
-            group: null,
-            is_blocking: false
-          }],
-          root: model.id,
-          parent: null
-        });
-
-        // Track that we've added this model
-        addedModelIds.add(model.id);
-      }
-    });
-  }
-
-  console.log(`[DEBUG] Converted ${openAIModels.length} models: ${openAIModels.map(m => m.id).join(', ')}`);
+  console.log(`[DEBUG] Converted ${openAIModels.length} models for client: ${openAIModels.map(m => m.id).join(', ')}`);
   return openAIModels;
 };
 
-/**
- * Fetch models from OpenRouter API
- */
 const fetchModelsFromOpenRouter = async () => {
   try {
-    // Get an OpenRouter API key
-    const openRouterKey = process.env.OPENROUTER_API_KEYS.split(',')[0];
+    // Fetching from OpenRouter might still be useful for validation or future features, but not strictly needed for the current response generation
+    // const openRouterKey = process.env.OPENROUTER_API_KEYS.split(',')[0];
+    // const response = await axios.get('https://openrouter.ai/api/v1/models', { headers: { 'Authorization': `Bearer ${openRouterKey}` } });
+    // Currently, we rely solely on the hardcoded lists
+    const modelsToReturn = convertToOpenAIFormat(null); // Pass null as we use hardcoded lists
 
-    // Fetch models from OpenRouter
-    const response = await axios.get('https://openrouter.ai/api/v1/models', {
-      headers: {
-        'Authorization': `Bearer ${openRouterKey}`
-      }
-    });
-
-    // Convert to OpenAI format
-    const openAIModels = convertToOpenAIFormat(response.data);
-
-    // Update cache
-    modelsCache = openAIModels;
+    modelsCache = modelsToReturn;
     modelsCacheExpiry = Date.now() + CACHE_TTL;
-
-    return openAIModels;
+    return modelsToReturn;
   } catch (error) {
-    console.error('Error fetching models from OpenRouter:', error.message);
-    return [];
+    console.error('Error fetching/processing models:', error.message);
+    return []; 
   }
 };
 
-/**
- * Get models from cache or fetch from OpenRouter
- */
 const getModelsData = async () => {
-  // If cache is valid, return it
   if (modelsCache && modelsCacheExpiry > Date.now()) {
+    console.log('[DEBUG] Returning cached models list.');
     return modelsCache;
   }
-
-  // Otherwise, fetch from OpenRouter
+  console.log('[DEBUG] Cache expired or empty, fetching/processing models.');
   return await fetchModelsFromOpenRouter();
 };
 
-/**
- * Get list of models
- */
 const getModels = async (req, res) => {
   try {
-    console.log(`[DEBUG] getModels called with headers:`, JSON.stringify(req.headers));
-    console.log(`[DEBUG] getModels called with query:`, JSON.stringify(req.query));
-
+    console.log(`[DEBUG] getModels called.`);
     const models = await getModelsData();
-
-    // Log the models we're returning
-    console.log(`[DEBUG] Returning ${models.length} models:`, models.map(m => m.id).join(', '));
-
-    res.json({
-      object: "list",
-      data: models
-    });
+    console.log(`[DEBUG] Returning ${models.length} models.`);
+    res.json({ object: "list", data: models });
   } catch (error) {
     console.error('Error in getModels:', error.message);
-    res.status(500).json({
-      error: {
-        message: 'Failed to retrieve models',
-        type: "server_error",
-        param: null,
-        code: "models_unavailable"
-      }
-    });
+    res.status(500).json({ error: { message: 'Failed to retrieve models' } });
   }
 };
 
-/**
- * Get a specific model
- */
 const getModel = async (req, res) => {
   try {
     const modelId = req.params.model;
-    console.log(`[DEBUG] Requested model: '${modelId}'`);
-
+    console.log(`[DEBUG] getModel called for ID: '${modelId}'`);
     const models = await getModelsData();
-
-    // Try exact match first
-    let model = models.find(m => m.id === modelId);
-
-    // If not found, try more flexible matching
+    const model = models.find(m => m.id === modelId);
     if (!model) {
-      // Try without the :free suffix
-      if (modelId.includes(':free')) {
-        const baseModelId = modelId.split(':')[0];
-        model = models.find(m => m.id.startsWith(baseModelId));
-      }
-      // Try with the :free suffix
-      else {
-        model = models.find(m => m.id.startsWith(modelId + ':'));
-      }
-
-      // Try case-insensitive match
-      if (!model) {
-        const lowerModelId = modelId.toLowerCase();
-        model = models.find(m => m.id.toLowerCase().includes(lowerModelId));
-      }
-
-      // Try matching just the model name without provider
-      if (!model && modelId.includes('/')) {
-        const modelName = modelId.split('/')[1];
-        model = models.find(m => m.id.includes(modelName));
-      }
+      console.log(`[DEBUG] Model '${modelId}' not found in available list.`);
+      return res.status(404).json({ error: { message: `The model '${modelId}' does not exist`, code: "model_not_found" } });
     }
-
-    if (!model) {
-      console.log(`[DEBUG] Model '${modelId}' not found. Available models: ${models.map(m => m.id).join(', ')}`);
-      return res.status(404).json({
-        error: {
-          message: `The model '${modelId}' does not exist or you don't have access to it`,
-          type: "invalid_request_error",
-          param: "model",
-          code: "model_not_found"
-        },
-        object: "error",
-        status: 404,
-        lc_error_code: "MODEL_NOT_FOUND"
-      });
-    }
-
     console.log(`[DEBUG] Found model: '${model.id}'`);
     res.json(model);
   } catch (error) {
     console.error('Error in getModel:', error.message);
-    res.status(500).json({
-      error: {
-        message: 'Failed to retrieve model',
-        type: "server_error",
-        param: null,
-        code: "model_unavailable"
-      }
-    });
+    res.status(500).json({ error: { message: 'Failed to retrieve model' } });
   }
 };
 
